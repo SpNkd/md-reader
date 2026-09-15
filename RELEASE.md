@@ -29,6 +29,7 @@ The release workflow already passes the standard Tauri signing variables to macO
 
 - `APPLE_CERTIFICATE`: base64-encoded `.p12` Developer ID Application certificate.
 - `APPLE_CERTIFICATE_PASSWORD`: password for that certificate.
+- `KEYCHAIN_PASSWORD`: password used by the temporary CI keychain.
 - `APPLE_SIGNING_IDENTITY`: the full `Developer ID Application: ...` identity.
 - `APPLE_ID`: Apple ID used for notarization.
 - `APPLE_PASSWORD`: an app-specific Apple ID password.
