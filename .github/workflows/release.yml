@@ -137,8 +137,12 @@ jobs:
             exit 1
           fi
 
-          gh release create "${GITHUB_REF_NAME}" "${assets[@]}" \
-            --verify-tag \
-            --title "MD Reader ${GITHUB_REF_NAME}" \
-            --notes "Download the installer for your operating system. macOS releases require Apple Developer signing and notarization secrets for a warning-free first launch." \
-            --generate-notes
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${assets[@]}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" "${assets[@]}" \
+              --verify-tag \
+              --title "MD Reader ${GITHUB_REF_NAME}" \
+              --notes "Download the installer for your operating system. macOS releases use ad-hoc signing until Apple Developer signing and notarization secrets are configured." \
+              --generate-notes
+          fi
