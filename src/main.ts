@@ -5,7 +5,7 @@ import { open, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import "./styles.css";
 
-type Mode = "read" | "edit";
+type Mode = "read" | "edit" | "source";
 type Theme = "system" | "light" | "dark";
 type FontSize = "smaller" | "default" | "larger";
 
@@ -59,6 +59,7 @@ app.innerHTML = `
         <div class="mode-switch" role="group" aria-label="View mode">
           <button id="read-button" class="mode-button active" type="button">Read</button>
           <button id="edit-button" class="mode-button" type="button">Edit</button>
+          <button id="source-button" class="mode-button" type="button">Source</button>
         </div>
         <button id="menu-button" class="icon-button" type="button" aria-label="More options" aria-expanded="false">•••</button>
         <div id="menu" class="menu" hidden>
@@ -119,6 +120,7 @@ app.innerHTML = `
         <button class="format-button" data-command="redo" type="button" aria-label="Redo" title="Redo (⇧⌘Z)">↷</button>
       </div>
       <div id="editor-host" class="content editor-host" hidden></div>
+      <textarea id="source-editor" class="content source-editor" hidden spellcheck="false" aria-label="Raw Markdown source" placeholder="Start writing Markdown…"></textarea>
       <div id="empty-state" class="empty-state" hidden>
         <p>This document is empty.</p>
       </div>
@@ -182,6 +184,7 @@ const tableColumnsInput = getElement<HTMLInputElement>("table-columns");
 const aboutDialog = getElement<HTMLDialogElement>("about-dialog");
 const editorToolbar = getElement<HTMLDivElement>("editor-toolbar");
 const formatSelect = getElement<HTMLSelectElement>("format-select");
+const sourceEditor = getElement<HTMLTextAreaElement>("source-editor");
 const dropOverlay = getElement<HTMLDivElement>("drop-overlay");
 
 bootstrap();
@@ -229,6 +232,8 @@ function wireEvents(): void {
   getElement<HTMLButtonElement>("menu-save-as").addEventListener("click", () => void saveAs());
   getElement<HTMLButtonElement>("read-button").addEventListener("click", () => void setMode("read"));
   getElement<HTMLButtonElement>("edit-button").addEventListener("click", () => void setMode("edit"));
+  getElement<HTMLButtonElement>("source-button").addEventListener("click", () => void setMode("source"));
+  sourceEditor.addEventListener("input", syncFromSource);
   getElement<HTMLButtonElement>("menu-wrap").addEventListener("click", () => {
     preferences.wordWrap = !preferences.wordWrap;
     savePreferences();
@@ -377,7 +382,7 @@ function wireEvents(): void {
 
 async function requestQuit(): Promise<void> {
   if (quitting) return;
-  if (state.mode === "edit") syncFromEditor();
+  syncFromActiveEditor();
   if (state.dirty) {
     const choice = await askSaveChanges();
     if (choice === "save") {
@@ -478,7 +483,7 @@ async function replaceDocument(document: { path: string | null; name: string; co
 
 async function setMode(mode: Mode): Promise<void> {
   if (mode === state.mode || state.name === "MD Reader") return;
-  if (state.mode === "edit") syncFromEditor();
+  syncFromActiveEditor();
   state.mode = mode;
   renderState();
 }
@@ -491,20 +496,23 @@ function renderState(): void {
   reader.hidden = !hasDocument || state.mode !== "read";
   editorToolbar.hidden = !hasDocument || state.mode !== "edit";
   editorHost.hidden = !hasDocument || state.mode !== "edit";
-  emptyState.hidden = !hasDocument || Boolean(state.markdown.trim());
+  sourceEditor.hidden = !hasDocument || state.mode !== "source";
+  updateEmptyState();
 
   getElement<HTMLButtonElement>("read-button").classList.toggle("active", state.mode === "read");
   getElement<HTMLButtonElement>("edit-button").classList.toggle("active", state.mode === "edit");
+  getElement<HTMLButtonElement>("source-button").classList.toggle("active", state.mode === "source");
 
   if (!hasDocument) {
     reader.innerHTML = "";
     editorHost.innerHTML = "";
+    sourceEditor.value = "";
     return;
   }
   if (state.mode === "read") {
     reader.innerHTML = renderMarkdown(state.markdown, state.path);
     editor = null;
-  } else {
+  } else if (state.mode === "edit") {
     editorHost.innerHTML = `<div class="editor-surface" contenteditable="true" role="textbox" aria-label="Markdown editor" spellcheck="true">${renderMarkdown(state.markdown, state.path)}</div>`;
     editor = editorHost.querySelector<HTMLDivElement>(".editor-surface");
     savedEditorSelection = null;
@@ -513,6 +521,12 @@ function renderState(): void {
     editor?.addEventListener("mouseup", updateToolbarState);
     editor?.addEventListener("blur", rememberEditorSelection);
     updateToolbarState();
+  } else {
+    sourceEditor.value = state.markdown;
+    editor = null;
+    window.setTimeout(() => {
+      if (state.mode === "source" && !sourceEditor.hidden) sourceEditor.focus();
+    }, 0);
   }
   updateMenuChecks();
 }
@@ -588,12 +602,29 @@ function syncFromEditor(): void {
   state.markdown = htmlToMarkdown(editor);
   state.dirty = state.markdown !== state.savedMarkdown;
   dirtyIndicator.hidden = !state.dirty;
-  emptyState.hidden = Boolean(state.markdown.trim());
+  updateEmptyState();
+}
+
+function syncFromSource(): void {
+  state.markdown = sourceEditor.value;
+  state.dirty = state.markdown !== state.savedMarkdown;
+  dirtyIndicator.hidden = !state.dirty;
+  updateEmptyState();
+}
+
+function syncFromActiveEditor(): void {
+  if (state.mode === "edit") syncFromEditor();
+  else if (state.mode === "source") syncFromSource();
+}
+
+function updateEmptyState(): void {
+  const hasDocument = Boolean(state.path || state.name !== "MD Reader");
+  emptyState.hidden = !hasDocument || state.mode === "source" || Boolean(state.markdown.trim());
 }
 
 async function saveDocument(): Promise<boolean> {
   if (!state.path) return saveAs();
-  if (state.mode === "edit") syncFromEditor();
+  syncFromActiveEditor();
   try {
     await invoke("write_markdown", { path: state.path, content: state.markdown });
     state.savedMarkdown = state.markdown;
@@ -609,7 +640,7 @@ async function saveDocument(): Promise<boolean> {
 
 async function saveAs(): Promise<boolean> {
   closeMenu();
-  if (state.mode === "edit") syncFromEditor();
+  syncFromActiveEditor();
   const selected = await saveDialog({
     defaultPath: state.path ?? "untitled.md",
     filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],

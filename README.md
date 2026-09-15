@@ -8,6 +8,7 @@ MD Reader is a small, focused desktop application for reading and lightly editin
 
 - Comfortable rendered reading view with GFM-style headings, lists, task lists, tables, quotes, links, images and fenced code.
 - Visual formatted editor with a toolbar for headings, emphasis, lists, quotes, links, tables and code blocks, with Markdown round-trip for common blocks.
+- A separate Source mode for direct raw Markdown editing when exact syntax control is needed.
 - Create a new Markdown file, Open, Save, Save As, drag and drop, startup file arguments and single-instance file routing.
 - Relative Markdown links and local images.
 - Light, dark and system themes; font size, word wrap and zoom controls.
@@ -73,7 +74,7 @@ Open MD Reader and choose Open File or New File, drag a `.md` or `.markdown` fil
 open -a "/Applications/MD Reader.app" "/path/to/document.md"
 ```
 
-Use Read for the rendered document and Edit for the visual editor. New unsaved documents are named `Untitled.md` until you use Save As. Closing the window or choosing Quit exits the application; unsaved edits prompt before exit.
+Use Read for the rendered document, Edit for the visual editor, or Source for direct raw Markdown editing. New unsaved documents are named `Untitled.md` until you use Save As. Closing the window or choosing Quit exits the application; unsaved edits prompt before exit.
 
 ## Keyboard shortcuts
 

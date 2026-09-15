@@ -48,7 +48,7 @@ button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible { 
 .toolbar-actions { gap: 10px; position: relative; }
 .mode-switch { border: 1px solid var(--border); border-radius: 8px; padding: 2px; background: var(--surface-muted); }
 .mode-button, .icon-button { border: 0; background: transparent; cursor: pointer; }
-.mode-button { border-radius: 6px; padding: 5px 11px; color: var(--text-muted); font-size: 12px; }
+.mode-button { border-radius: 6px; padding: 5px 10px; color: var(--text-muted); font-size: 12px; }
 .mode-button.active { color: var(--text); background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.1); font-weight: 600; }
 .icon-button { width: 30px; height: 30px; border-radius: 7px; color: var(--text-muted); letter-spacing: 2px; font-weight: 700; }
 .icon-button:hover, .mode-button:hover { background: var(--surface-muted); color: var(--text); }
@@ -101,6 +101,11 @@ button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible { 
 .editor-surface { min-height: 420px; padding: 2px 20px 40px; border-radius: 10px; cursor: text; }
 .editor-surface:focus { outline: none; }
 .editor-surface:empty::before { content: "Start writing…"; color: var(--text-muted); }
+.source-editor { display: block; width: min(100% - 44px, 920px); min-height: calc(100% - 40px); margin: 0 auto; border: 0; resize: none; color: var(--text); background: transparent; font: 14px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 2; }
+.source-editor { padding: 58px 20px 100px; }
+.no-wrap .source-editor { white-space: pre; overflow-x: auto; }
+.source-editor:focus { outline: none; }
+.source-editor::placeholder { color: var(--text-muted); }
 
 .welcome { height: 100%; display: grid; place-items: center; padding-bottom: 7vh; }
 .welcome-card { text-align: center; }
@@ -158,5 +163,6 @@ button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible { 
   .content { width: min(100% - 28px, 830px); padding-top: 34px; }
   .editor-toolbar { width: calc(100% - 28px); overflow-x: auto; }
   .editor-host { width: calc(100% - 28px); }
+  .source-editor { width: calc(100% - 28px); }
   .mode-button { padding-inline: 8px; }
 }
