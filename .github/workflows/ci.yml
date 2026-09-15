@@ -8,8 +8,8 @@ permissions:
   contents: read
 
 jobs:
-  frontend:
-    name: Frontend checks
+  quality:
+    name: Frontend and Rust checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,18 +24,17 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # npm can omit platform-specific optional packages when the lockfile
+      # was created on another operating system. Reconcile the current
+      # runner's optional native packages without changing the lockfile.
+      - name: Repair platform optional dependencies
+        run: npm install --no-save --package-lock=false --include=optional
+
       - name: Typecheck
         run: npm run check
 
       - name: Build frontend
         run: npm run build
-
-  rust:
-    name: Rust checks
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
 
       - name: Install Tauri Linux dependencies
         run: |

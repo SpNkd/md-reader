@@ -71,6 +71,13 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # The lockfile is generated on macOS, while this matrix also runs on
+      # Linux and Windows. npm may omit Rollup's native optional package in
+      # that situation, so repair the current runner without changing the
+      # committed lockfile.
+      - name: Repair platform optional dependencies
+        run: npm install --no-save --package-lock=false --include=optional
+
       # Official Tauri action: it builds native bundles and stores them as
       # workflow artifacts. The publish job creates one release after all
       # matrix builds have finished.
