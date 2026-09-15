@@ -1,0 +1,29 @@
+{
+  "name": "md-reader",
+  "version": "0.1.0",
+  "description": "A focused, local Markdown reader and editor",
+  "author": "MD Reader contributors",
+  "license": "MIT",
+  "homepage": "https://github.com/SpNkd/md-reader",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SpNkd/md-reader.git"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "check": "tsc --noEmit",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.8.0",
+    "@tauri-apps/plugin-dialog": "^2.4.0",
+    "@tauri-apps/plugin-opener": "^2.5.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.8.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0"
+  }
+}

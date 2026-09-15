@@ -1,0 +1,38 @@
+node_modules/
+dist/
+src-tauri/target/
+build/
+release/
+.cargo/
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.cer
+*.key
+*.pem
+
+# Temporary files and logs
+*.log
+*.tmp
+*.temp
+tmp/
+temp/
+
+# OS packaging leftovers
+*.dmg.part
+*.msi.part

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="220" viewBox="0 0 720 220">
+  <rect width="720" height="220" rx="18" fill="#e9eefc"/>
+  <circle cx="110" cy="110" r="50" fill="#3568d4"/>
+  <path d="M92 146V74h23c25 0 39 12 39 35s-14 37-39 37H92zm17-15h6c14 0 22-7 22-22s-8-20-22-20h-6v42z" fill="white"/>
+  <text x="205" y="124" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="38" font-weight="600" fill="#252525">A local Markdown image</text>
+</svg>
