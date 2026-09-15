@@ -23,4 +23,15 @@ MD Reader uses semantic versions shared by `package.json`, `src-tauri/Cargo.toml
 
 5. GitHub Actions runs `.github/workflows/release.yml`, builds all platform bundles, waits for the matrix, creates the GitHub Release and uploads the installers.
 
-Do not commit signing certificates, private keys, notarization credentials or other secrets. Signing can be added later through GitHub Actions secrets.
+## macOS signing and notarization
+
+The release workflow already passes the standard Tauri signing variables to macOS builds. To remove Gatekeeper warnings, add these repository Actions secrets before creating the next release:
+
+- `APPLE_CERTIFICATE`: base64-encoded `.p12` Developer ID Application certificate.
+- `APPLE_CERTIFICATE_PASSWORD`: password for that certificate.
+- `APPLE_SIGNING_IDENTITY`: the full `Developer ID Application: ...` identity.
+- `APPLE_ID`: Apple ID used for notarization.
+- `APPLE_PASSWORD`: an app-specific Apple ID password.
+- `APPLE_TEAM_ID`: Apple Developer team ID.
+
+Do not commit signing certificates, private keys, notarization credentials or other secrets. After adding the secrets, create and push a new semantic-version tag; the macOS jobs will sign and notarize the bundles automatically.

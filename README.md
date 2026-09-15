@@ -39,7 +39,16 @@ Download the x64 NSIS `.exe` from Releases and run it. Unsigned development rele
 
 ### macOS
 
-Choose the `.dmg` matching your Mac: `aarch64` for Apple Silicon or `x86_64` for Intel. Open it and drag `MD Reader.app` to Applications. Current builds are unsigned; macOS may require Finder → Open or “Open Anyway” in Privacy & Security.
+Choose the `.dmg` matching your Mac: `aarch64` for Apple Silicon or `x86_64` for Intel. Open it and drag `MD Reader.app` to Applications. The DMG is intentionally small because Tauri uses the system WebKit; the app bundle is larger once mounted.
+
+The public `v0.1.0` build is not signed or notarized yet. If macOS reports that the app is “damaged” after downloading it from GitHub, remove the download quarantine after copying it to Applications, then launch it:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/MD Reader.app"
+open "/Applications/MD Reader.app"
+```
+
+Future releases can remove this step after the Apple signing and notarization secrets described in `RELEASE.md` are configured.
 
 ### Linux
 
@@ -137,7 +146,7 @@ The Tauri bundle declares `.md` and `.markdown` as Markdown document types. Afte
 
 - The editor is a lightweight MVP, not a full Typora-style block editor. Complex Markdown constructs may be normalized when switching through Edit and saving.
 - Syntax highlighting, live preview split view, tabs, autosave and multi-window document management are outside the current MVP.
-- Release installers are currently unsigned. Signing and notarization can be added later through CI secrets without changing the build matrix.
+- macOS releases need Apple Developer signing and notarization secrets for a warning-free first launch; the workflow is prepared for them.
 - Cross-platform installers are built in GitHub Actions; local verification on every target OS is still recommended.
 
 ## Contributing
