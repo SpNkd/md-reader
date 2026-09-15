@@ -46,14 +46,14 @@ Choose the `.dmg` matching your Mac: `aarch64` for Apple Silicon or `x86_64` for
 For AppImage, download the x86_64 file, make it executable and run it:
 
 ```bash
-chmod +x MD-Reader_*.AppImage
-./MD-Reader_*.AppImage
+chmod +x ./*.AppImage
+./*.AppImage
 ```
 
 For Debian/Ubuntu, install the `.deb` package:
 
 ```bash
-sudo apt install ./MD-Reader_*.deb
+sudo apt install ./*.deb
 ```
 
 ## Usage
@@ -138,7 +138,7 @@ The Tauri bundle declares `.md` and `.markdown` as Markdown document types. Afte
 - The editor is a lightweight MVP, not a full Typora-style block editor. Complex Markdown constructs may be normalized when switching through Edit and saving.
 - Syntax highlighting, live preview split view, tabs, autosave and multi-window document management are outside the current MVP.
 - Release installers are currently unsigned. Signing and notarization can be added later through CI secrets without changing the build matrix.
-- Automated release builds are configured but should not be described as passing until the workflow has run on the published GitHub repository.
+- Cross-platform installers are built in GitHub Actions; local verification on every target OS is still recommended.
 
 ## Contributing
 
