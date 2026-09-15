@@ -39,6 +39,7 @@ const state: DocumentState = {
 
 const preferences: Preferences = loadPreferences();
 let editor: HTMLDivElement | null = null;
+let savedEditorSelection: Range | null = null;
 let menuOpen = false;
 let quitting = false;
 let unlistenOpenFile: UnlistenFn | undefined;
@@ -61,6 +62,7 @@ app.innerHTML = `
         </div>
         <button id="menu-button" class="icon-button" type="button" aria-label="More options" aria-expanded="false">•••</button>
         <div id="menu" class="menu" hidden>
+          <button id="menu-new" type="button">New Markdown File <span>⌘N</span></button>
           <button id="menu-open" type="button">Open File <span>⌘O</span></button>
           <button id="menu-save" type="button">Save <span>⌘S</span></button>
           <button id="menu-save-as" type="button">Save As… <span>⇧⌘S</span></button>
@@ -85,11 +87,37 @@ app.innerHTML = `
           <div class="welcome-mark">M</div>
           <h1>MD Reader</h1>
           <p>Drop a Markdown file here<br /><span>or</span></p>
-          <button id="welcome-open" class="primary-button" type="button">Open File</button>
+          <div class="welcome-actions">
+            <button id="welcome-open" class="primary-button" type="button">Open File</button>
+            <button id="welcome-new" class="secondary-button" type="button">New File</button>
+          </div>
           <p class="welcome-hint">.md and .markdown</p>
         </div>
       </section>
       <article id="reader" class="content reader-content" hidden></article>
+      <div id="editor-toolbar" class="editor-toolbar" hidden aria-label="Formatting toolbar">
+        <select id="format-select" class="format-select" aria-label="Text style">
+          <option value="p">Paragraph</option>
+          <option value="h1">Heading 1</option>
+          <option value="h2">Heading 2</option>
+          <option value="h3">Heading 3</option>
+          <option value="blockquote">Quote</option>
+          <option value="pre">Code block</option>
+        </select>
+        <span class="toolbar-divider" aria-hidden="true"></span>
+        <button class="format-button" data-command="bold" type="button" aria-label="Bold" title="Bold (⌘B)"><strong>B</strong></button>
+        <button class="format-button" data-command="italic" type="button" aria-label="Italic" title="Italic (⌘I)"><em>I</em></button>
+        <button class="format-button" data-command="strikeThrough" type="button" aria-label="Strikethrough" title="Strikethrough"><s>S</s></button>
+        <span class="toolbar-divider" aria-hidden="true"></span>
+        <button class="format-button" data-command="insertUnorderedList" type="button" aria-label="Bullet list" title="Bullet list">•≡</button>
+        <button class="format-button" data-command="insertOrderedList" type="button" aria-label="Numbered list" title="Numbered list">1≡</button>
+        <button class="format-button" data-command="blockquote" type="button" aria-label="Quote" title="Quote">❝</button>
+        <button class="format-button" data-command="createTable" type="button" aria-label="Insert table" title="Insert table">▦</button>
+        <button class="format-button" data-command="createLink" type="button" aria-label="Insert link" title="Insert link">↗</button>
+        <span class="toolbar-divider" aria-hidden="true"></span>
+        <button class="format-button" data-command="undo" type="button" aria-label="Undo" title="Undo (⌘Z)">↶</button>
+        <button class="format-button" data-command="redo" type="button" aria-label="Redo" title="Redo (⇧⌘Z)">↷</button>
+      </div>
       <div id="editor-host" class="content editor-host" hidden></div>
       <div id="empty-state" class="empty-state" hidden>
         <p>This document is empty.</p>
@@ -110,6 +138,31 @@ app.innerHTML = `
         </div>
       </form>
     </dialog>
+    <dialog id="table-dialog" class="table-dialog">
+      <form method="dialog">
+        <h2>Insert table</h2>
+        <p>Choose the size. The first row will be the table header.</p>
+        <div class="table-fields">
+          <label class="table-field">Rows <input id="table-rows" type="number" min="2" max="20" value="3" /></label>
+          <label class="table-field">Columns <input id="table-columns" type="number" min="1" max="10" value="3" /></label>
+        </div>
+        <div class="dialog-actions">
+          <button value="cancel" type="submit">Cancel</button>
+          <button value="insert" class="primary-button" type="submit">Insert table</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="about-dialog" class="about-dialog">
+      <div class="about-content">
+        <div class="about-mark">.md</div>
+        <h2>MD Reader</h2>
+        <p class="about-version">Version 0.1.0</p>
+        <p>A focused, local Markdown reader and visual editor.</p>
+        <p class="about-note">Your Markdown files stay on this computer. MD Reader does not upload or send them anywhere.</p>
+        <a href="#" data-external-url="https://github.com/SpNkd/md-reader">View project on GitHub ↗</a>
+        <form method="dialog"><button class="primary-button" type="submit">Done</button></form>
+      </div>
+    </dialog>
   </main>
 `;
 
@@ -123,6 +176,12 @@ const menu = getElement<HTMLDivElement>("menu");
 const menuButton = getElement<HTMLButtonElement>("menu-button");
 const toast = getElement<HTMLDivElement>("toast");
 const confirmDialog = getElement<HTMLDialogElement>("confirm-dialog");
+const tableDialog = getElement<HTMLDialogElement>("table-dialog");
+const tableRowsInput = getElement<HTMLInputElement>("table-rows");
+const tableColumnsInput = getElement<HTMLInputElement>("table-columns");
+const aboutDialog = getElement<HTMLDialogElement>("about-dialog");
+const editorToolbar = getElement<HTMLDivElement>("editor-toolbar");
+const formatSelect = getElement<HTMLSelectElement>("format-select");
 const dropOverlay = getElement<HTMLDivElement>("drop-overlay");
 
 bootstrap();
@@ -137,10 +196,12 @@ async function bootstrap(): Promise<void> {
         void openDocument(event.payload);
       });
       unlistenNativeMenu = await listen<string>("native-menu", (event) => {
-        if (event.payload === "open") void chooseAndOpen();
+        if (event.payload === "new") void newDocument();
+        else if (event.payload === "open") void chooseAndOpen();
         else if (event.payload === "save") void saveDocument();
         else if (event.payload === "save-as") void saveAs();
         else if (event.payload === "quit") void requestQuit();
+        else if (event.payload === "about" && !aboutDialog.open) aboutDialog.showModal();
         else if (event.payload === "toggle-mode") void setMode(state.mode === "read" ? "edit" : "read");
         else if (event.payload === "zoom-in") adjustZoom(0.05);
         else if (event.payload === "zoom-out") adjustZoom(-0.05);
@@ -161,6 +222,8 @@ async function bootstrap(): Promise<void> {
 
 function wireEvents(): void {
   getElement<HTMLButtonElement>("welcome-open").addEventListener("click", () => void chooseAndOpen());
+  getElement<HTMLButtonElement>("welcome-new").addEventListener("click", () => void newDocument());
+  getElement<HTMLButtonElement>("menu-new").addEventListener("click", () => void newDocument());
   getElement<HTMLButtonElement>("menu-open").addEventListener("click", () => void chooseAndOpen());
   getElement<HTMLButtonElement>("menu-save").addEventListener("click", () => void saveDocument());
   getElement<HTMLButtonElement>("menu-save-as").addEventListener("click", () => void saveAs());
@@ -174,7 +237,27 @@ function wireEvents(): void {
   });
   getElement<HTMLButtonElement>("menu-about").addEventListener("click", () => {
     closeMenu();
-    showToast("MD Reader 0.1.0 — a focused Markdown reader and editor");
+    aboutDialog.showModal();
+  });
+
+  editorToolbar.querySelectorAll<HTMLButtonElement>("[data-command]").forEach((button) => {
+    button.addEventListener("mousedown", (event) => event.preventDefault());
+    button.addEventListener("click", () => runEditorCommand(button.dataset.command ?? ""));
+  });
+  formatSelect.addEventListener("change", () => runEditorCommand("formatBlock", formatSelect.value));
+  tableDialog.addEventListener("close", () => {
+    if (tableDialog.returnValue !== "insert" || !editor) return;
+    const rows = parseTableDimension(tableRowsInput.value, 2, 20);
+    const columns = parseTableDimension(tableColumnsInput.value, 1, 10);
+    if (rows === null || columns === null) {
+      showToast("Please choose 2–20 rows and 1–10 columns");
+      return;
+    }
+    restoreEditorSelection();
+    document.execCommand("insertHTML", false, createTableHtml(rows, columns));
+    syncFromEditor();
+    rememberEditorSelection();
+    updateToolbarState();
   });
 
   document.querySelectorAll<HTMLButtonElement>("[data-theme]").forEach((button) => {
@@ -208,6 +291,9 @@ function wireEvents(): void {
     if (key === "o") {
       event.preventDefault();
       void chooseAndOpen();
+    } else if (key === "n") {
+      event.preventDefault();
+      void newDocument();
     } else if (key === "s" && event.shiftKey) {
       event.preventDefault();
       void saveAs();
@@ -344,6 +430,20 @@ async function chooseAndOpen(): Promise<void> {
   if (typeof selected === "string") await openDocument(selected);
 }
 
+async function newDocument(): Promise<void> {
+  closeMenu();
+  if (!(await confirmBeforeReplacing())) return;
+  state.path = null;
+  state.name = "Untitled.md";
+  state.markdown = "";
+  state.savedMarkdown = "";
+  state.dirty = false;
+  state.mode = "edit";
+  editor = null;
+  renderState();
+  window.setTimeout(() => editor?.focus(), 0);
+}
+
 async function openDocument(path: string): Promise<void> {
   if (!isMarkdownPath(path)) {
     showToast("MD Reader opens .md and .markdown files");
@@ -389,6 +489,7 @@ function renderState(): void {
   const hasDocument = Boolean(state.path || state.name !== "MD Reader");
   welcome.hidden = hasDocument;
   reader.hidden = !hasDocument || state.mode !== "read";
+  editorToolbar.hidden = !hasDocument || state.mode !== "edit";
   editorHost.hidden = !hasDocument || state.mode !== "edit";
   emptyState.hidden = !hasDocument || Boolean(state.markdown.trim());
 
@@ -406,10 +507,80 @@ function renderState(): void {
   } else {
     editorHost.innerHTML = `<div class="editor-surface" contenteditable="true" role="textbox" aria-label="Markdown editor" spellcheck="true">${renderMarkdown(state.markdown, state.path)}</div>`;
     editor = editorHost.querySelector<HTMLDivElement>(".editor-surface");
+    savedEditorSelection = null;
     editor?.addEventListener("input", syncFromEditor);
-    editor?.addEventListener("keydown", handleEditorKeydown);
+    editor?.addEventListener("keyup", updateToolbarState);
+    editor?.addEventListener("mouseup", updateToolbarState);
+    editor?.addEventListener("blur", rememberEditorSelection);
+    updateToolbarState();
   }
   updateMenuChecks();
+}
+
+function runEditorCommand(command: string, value?: string): void {
+  if (!editor) return;
+  restoreEditorSelection();
+  if (command === "createLink") {
+    const url = window.prompt("Link URL", "https://");
+    if (!url) return;
+    document.execCommand("createLink", false, url.trim());
+  } else if (command === "createTable") {
+    rememberEditorSelection();
+    tableRowsInput.value = "3";
+    tableColumnsInput.value = "3";
+    tableDialog.returnValue = "";
+    tableDialog.showModal();
+    return;
+  } else if (command === "blockquote") {
+    document.execCommand("formatBlock", false, "blockquote");
+  } else if (command === "formatBlock") {
+    document.execCommand("formatBlock", false, value ?? "p");
+  } else {
+    document.execCommand(command, false);
+  }
+  syncFromEditor();
+  rememberEditorSelection();
+  updateToolbarState();
+}
+
+function parseTableDimension(input: string, minimum: number, maximum: number): number | null {
+  const value = Number.parseInt(input, 10);
+  return Number.isInteger(value) && value >= minimum && value <= maximum ? value : null;
+}
+
+function createTableHtml(rows: number, columns: number): string {
+  const header = Array.from({ length: columns }, (_, index) => `<th>Header ${index + 1}</th>`).join("");
+  const body = Array.from({ length: rows - 1 }, () => `<tr>${Array.from({ length: columns }, () => "<td>Cell</td>").join("")}</tr>`).join("");
+  return `<div class="table-scroll"><table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div><p><br></p>`;
+}
+
+function updateToolbarState(): void {
+  if (!editor) return;
+  editorToolbar.querySelectorAll<HTMLButtonElement>("[data-command]").forEach((button) => {
+    const command = button.dataset.command;
+    const active = command ? ["bold", "italic", "strikeThrough", "insertUnorderedList", "insertOrderedList"].includes(command) && document.queryCommandState(command) : false;
+    button.classList.toggle("active", active);
+  });
+  const block = document.queryCommandValue("formatBlock").replace(/[<>]/g, "").toLowerCase();
+  const normalizedBlock = block === "div" ? "p" : block;
+  if (["p", "h1", "h2", "h3", "blockquote", "pre"].includes(normalizedBlock)) formatSelect.value = normalizedBlock;
+}
+
+function rememberEditorSelection(): void {
+  if (!editor) return;
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return;
+  const range = selection.getRangeAt(0);
+  if (editor.contains(range.commonAncestorContainer)) savedEditorSelection = range.cloneRange();
+}
+
+function restoreEditorSelection(): void {
+  editor?.focus();
+  if (!savedEditorSelection) return;
+  const selection = window.getSelection();
+  if (!selection) return;
+  selection.removeAllRanges();
+  selection.addRange(savedEditorSelection);
 }
 
 function syncFromEditor(): void {
@@ -417,15 +588,7 @@ function syncFromEditor(): void {
   state.markdown = htmlToMarkdown(editor);
   state.dirty = state.markdown !== state.savedMarkdown;
   dirtyIndicator.hidden = !state.dirty;
-}
-
-function handleEditorKeydown(event: KeyboardEvent): void {
-  const modifier = event.metaKey || event.ctrlKey;
-  if (modifier && (event.key.toLowerCase() === "b" || event.key.toLowerCase() === "i")) {
-    event.preventDefault();
-    document.execCommand(event.key.toLowerCase() === "b" ? "bold" : "italic");
-    syncFromEditor();
-  }
+  emptyState.hidden = Boolean(state.markdown.trim());
 }
 
 async function saveDocument(): Promise<boolean> {
@@ -754,7 +917,8 @@ function renderTable(lines: string[], baseDir: string): string {
 
 function htmlToMarkdown(root: HTMLElement): string {
   const blocks = Array.from(root.children).map((child) => nodeToMarkdown(child)).filter(Boolean);
-  return `${blocks.join("\n\n").replace(/[ \t]+\n/g, "\n").trim()}\n`;
+  const markdown = blocks.join("\n\n").replace(/[ \t]+\n/g, "\n").trim();
+  return markdown ? `${markdown}\n` : "";
 }
 
 function nodeToMarkdown(node: Node): string {

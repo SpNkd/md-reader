@@ -95,6 +95,9 @@ fn main() {
                 let _ = window.set_title("MD Reader");
             }
 
+            let new_file = MenuItemBuilder::with_id("file-new", "New Markdown File")
+                .accelerator("CmdOrCtrl+N")
+                .build(app)?;
             let open = MenuItemBuilder::with_id("file-open", "Open…")
                 .accelerator("CmdOrCtrl+O")
                 .build(app)?;
@@ -119,9 +122,12 @@ fn main() {
             let zoom_reset = MenuItemBuilder::with_id("view-zoom-reset", "Reset Zoom")
                 .accelerator("CmdOrCtrl+0")
                 .build(app)?;
+            let about = MenuItemBuilder::with_id("help-about", "About MD Reader")
+                .build(app)?;
             let menu = Menu::default(app.handle())?;
             let mut has_file_menu = false;
             let mut has_view_menu = false;
+            let mut has_help_menu = false;
             for item in menu.items()? {
                 let MenuItemKind::Submenu(submenu) = item else {
                     continue;
@@ -129,6 +135,7 @@ fn main() {
                 match submenu.text()?.as_str() {
                     "File" => {
                         has_file_menu = true;
+                        submenu.append(&new_file)?;
                         submenu.append(&open)?;
                         submenu.append(&save)?;
                         submenu.append(&save_as)?;
@@ -141,11 +148,16 @@ fn main() {
                         submenu.append(&zoom_out)?;
                         submenu.append(&zoom_reset)?;
                     }
+                    "Help" => {
+                        has_help_menu = true;
+                        submenu.append(&about)?;
+                    }
                     _ => {}
                 }
             }
             if !has_file_menu {
                 let file_menu = SubmenuBuilder::with_id(app, "file-menu", "File")
+                    .item(&new_file)
                     .item(&open)
                     .item(&save)
                     .item(&save_as)
@@ -164,10 +176,17 @@ fn main() {
                     .build()?;
                 menu.append(&view_menu)?;
             }
+            if !has_help_menu {
+                let help_menu = SubmenuBuilder::with_id(app, "help-menu", "Help")
+                    .item(&about)
+                    .build()?;
+                menu.append(&help_menu)?;
+            }
             app.set_menu(menu)?;
             app.on_menu_event(|app, event| {
                 let id = event.id().as_ref();
                 let command = match id {
+                    "file-new" => Some("new"),
                     "file-open" => Some("open"),
                     "file-save" => Some("save"),
                     "file-save-as" => Some("save-as"),
@@ -176,6 +195,7 @@ fn main() {
                     "view-zoom-in" => Some("zoom-in"),
                     "view-zoom-out" => Some("zoom-out"),
                     "view-zoom-reset" => Some("zoom-reset"),
+                    "help-about" => Some("about"),
                     _ => None,
                 };
                 if let Some(command) = command {

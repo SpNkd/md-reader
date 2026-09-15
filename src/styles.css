@@ -87,8 +87,17 @@ button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible { 
 .reader-content table, .editor-surface table { width: 100%; border-collapse: collapse; font-size: .93em; }
 .reader-content th, .reader-content td, .editor-surface th, .editor-surface td { padding: .55em .75em; border: 1px solid var(--border); text-align: left; }
 .reader-content th, .editor-surface th { background: var(--surface-muted); font-weight: 650; }
+.editor-surface th, .editor-surface td { cursor: text; }
 .no-wrap .editor-surface { white-space: pre; overflow-x: auto; }
+.editor-toolbar { width: min(100% - 44px, 920px); min-height: 42px; display: flex; align-items: center; gap: 4px; margin: 24px auto 0; padding: 5px; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--surface) 94%, transparent); box-shadow: 0 3px 12px rgba(0,0,0,.06); }
+.format-select { height: 30px; max-width: 132px; border: 0; border-radius: 6px; padding: 0 7px; color: var(--text); background: transparent; font-size: 12px; cursor: pointer; }
+.format-select:hover, .format-select:focus { background: var(--surface-muted); outline: none; }
+.format-button { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 6px; color: var(--text-muted); background: transparent; cursor: pointer; font-size: 14px; line-height: 1; }
+.format-button:hover, .format-button.active { color: var(--text); background: var(--surface-muted); }
+.format-button.active { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+.toolbar-divider { width: 1px; height: 20px; margin: 0 3px; background: var(--border); }
 .editor-host { width: min(100% - 44px, 920px); }
+.editor-host { padding-top: 20px; }
 .editor-surface { min-height: 420px; padding: 2px 20px 40px; border-radius: 10px; cursor: text; }
 .editor-surface:focus { outline: none; }
 .editor-surface:empty::before { content: "Start writing…"; color: var(--text-muted); }
@@ -100,8 +109,11 @@ button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible { 
 .welcome p { margin: 0 0 17px; color: var(--text-muted); line-height: 1.6; font-size: 14px; }
 .welcome p span { display: inline-block; margin: 7px 0 0; font-size: 12px; }
 .welcome-hint { margin-top: 15px !important; font-size: 11px !important; opacity: .7; }
+.welcome-actions { display: flex; justify-content: center; gap: 8px; }
 .primary-button { border: 0; border-radius: 7px; background: var(--accent); color: white; padding: 8px 15px; cursor: pointer; font-size: 13px; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
 .primary-button:hover { filter: brightness(1.08); }
+.secondary-button { border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); padding: 8px 15px; cursor: pointer; font-size: 13px; font-weight: 600; }
+.secondary-button:hover { background: var(--surface-muted); }
 .empty-state { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-muted); font-size: 14px; pointer-events: none; }
 .drop-overlay { position: absolute; inset: 0; z-index: 10; display: grid; place-items: center; background: color-mix(in srgb, var(--background) 80%, var(--accent)); border: 2px dashed var(--accent); }
 .drop-card { display: grid; gap: 5px; justify-items: center; padding: 28px 40px; border-radius: 14px; background: var(--surface); box-shadow: 0 10px 30px rgba(0,0,0,.12); }
@@ -119,9 +131,32 @@ button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible { 
 .dialog-actions .quiet-danger { color: #c55b58; }
 .dialog-actions .primary-button { border-color: transparent; }
 
+.table-dialog { width: min(380px, calc(100% - 36px)); padding: 0; border: 1px solid var(--border); border-radius: 12px; color: var(--text); background: var(--surface); box-shadow: 0 20px 60px rgba(0,0,0,.28); }
+.table-dialog::backdrop { background: rgba(0,0,0,.32); }
+.table-dialog form { padding: 23px; }
+.table-dialog h2 { margin: 0 0 8px; font-size: 17px; }
+.table-dialog p { margin: 0 0 19px; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+.table-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.table-field { display: grid; gap: 6px; color: var(--text-muted); font-size: 12px; }
+.table-field input { width: 100%; border: 1px solid var(--border); border-radius: 7px; padding: 8px 9px; color: var(--text); background: var(--background); font: inherit; }
+.table-field input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.table-dialog .dialog-actions { margin-top: 22px; }
+
+.about-dialog { width: min(360px, calc(100% - 36px)); padding: 0; border: 1px solid var(--border); border-radius: 14px; color: var(--text); background: var(--surface); box-shadow: 0 20px 60px rgba(0,0,0,.28); }
+.about-dialog::backdrop { background: rgba(0,0,0,.32); }
+.about-content { display: grid; justify-items: center; padding: 28px 30px 25px; text-align: center; }
+.about-mark { display: grid; place-items: center; width: 58px; height: 58px; margin-bottom: 15px; border-radius: 16px; color: var(--background); background: var(--text); font-size: 20px; font-weight: 800; letter-spacing: -.08em; }
+.about-content h2 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
+.about-content p { margin: 8px 0 0; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+.about-content .about-version { margin-top: 3px; font-size: 11px; }
+.about-content .about-note { margin-top: 17px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12px; }
+.about-content a { margin-top: 16px; color: var(--accent); font-size: 12px; }
+.about-content form { margin-top: 21px; }
+
 @media (max-width: 640px) {
   .topbar { padding-inline: 12px; }
   .content { width: min(100% - 28px, 830px); padding-top: 34px; }
+  .editor-toolbar { width: calc(100% - 28px); overflow-x: auto; }
   .editor-host { width: calc(100% - 28px); }
   .mode-button { padding-inline: 8px; }
 }

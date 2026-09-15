@@ -7,8 +7,8 @@ MD Reader is a small, focused desktop application for reading and lightly editin
 ## Features
 
 - Comfortable rendered reading view with GFM-style headings, lists, task lists, tables, quotes, links, images and fenced code.
-- Lightweight formatted editor with Markdown round-trip for common blocks.
-- Open, Save, Save As, drag and drop, startup file arguments and single-instance file routing.
+- Visual formatted editor with a toolbar for headings, emphasis, lists, quotes, links, tables and code blocks, with Markdown round-trip for common blocks.
+- Create a new Markdown file, Open, Save, Save As, drag and drop, startup file arguments and single-instance file routing.
 - Relative Markdown links and local images.
 - Light, dark and system themes; font size, word wrap and zoom controls.
 - UTF-8 and UTF-8 BOM support, including Cyrillic-safe file I/O.
@@ -67,18 +67,19 @@ sudo apt install ./*.deb
 
 ## Usage
 
-Open MD Reader and choose Open File, drag a `.md` or `.markdown` file into the window, or pass a file path from the command line:
+Open MD Reader and choose Open File or New File, drag a `.md` or `.markdown` file into the window, or pass a file path from the command line:
 
 ```bash
 open -a "/Applications/MD Reader.app" "/path/to/document.md"
 ```
 
-Use Read for the rendered document and Edit for the lightweight formatted editor. Closing the window or choosing Quit exits the application; unsaved edits prompt before exit.
+Use Read for the rendered document and Edit for the visual editor. New unsaved documents are named `Untitled.md` until you use Save As. Closing the window or choosing Quit exits the application; unsaved edits prompt before exit.
 
 ## Keyboard shortcuts
 
 | Shortcut | Action |
 | --- | --- |
+| `Ctrl/Cmd + N` | New Markdown file |
 | `Ctrl/Cmd + O` | Open |
 | `Ctrl/Cmd + S` | Save |
 | `Ctrl/Cmd + Shift + S` | Save As |
