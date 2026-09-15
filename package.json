@@ -12,7 +12,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "web:dev": "vite --host 127.0.0.1",
     "build": "vite build",
+    "web:build": "vite build",
     "check": "tsc --noEmit",
     "tauri": "tauri"
   },

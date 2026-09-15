@@ -2,13 +2,19 @@
 
 ## Stack
 
-Tauri 2, Rust, Vite and vanilla TypeScript/CSS. There is no SPA framework or UI kit. Tauri keeps the native shell and file integration small while the frontend stays a single eagerly loaded reader surface.
+Tauri 2, Rust, Vite and vanilla TypeScript/CSS. There is no SPA framework or UI kit. Tauri keeps the native shell and file integration small while the browser build stays a single static reader surface.
 
 ## Markdown and editor
 
-The app uses a small local GFM-oriented renderer in `src/main.ts`. It supports headings, paragraphs, emphasis, strike, links, images, fenced code, quotes, lists, task lists, tables and rules. Text and raw HTML are escaped; URL schemes are allow-listed. Local image URLs are converted through Tauri's asset protocol relative to the open document.
+The app uses a small local GFM-oriented renderer in `src/main.ts`. It supports headings, paragraphs, emphasis, strike, links, images, fenced code, quotes, lists, task lists, tables and rules. Text and raw HTML are escaped; URL schemes are allow-listed. Local image URLs are converted through Tauri's asset protocol relative to the open document. In the browser, inaccessible relative images become a safe placeholder because the File API cannot silently access neighboring files.
 
-Edit mode lazily creates a `contenteditable` surface from the rendered HTML. This is intentionally a small MVP compromise instead of shipping a large ProseMirror/Milkdown stack: the user edits formatted blocks, while a DOM serializer writes Markdown back. The reader path never loads an editor dependency.
+Edit mode lazily creates a `contenteditable` surface from the rendered HTML. This is intentionally a small MVP compromise instead of shipping a large ProseMirror/Milkdown stack: the user edits formatted blocks, while a DOM serializer writes Markdown back. The reader path never creates an editor surface or loads an editor dependency.
+
+## Shared desktop/web surface
+
+The browser build uses the same entry point, reader, renderer, editor, state, themes and keyboard handling as the Tauri build. `src/platform/web-document-provider.ts` contains the only browser-specific document adapter: Chrome/Edge can retain a `FileSystemFileHandle` and save back to the selected file, while browsers without that API use a Blob download.
+
+`vite.config.ts` sets `/REPOSITORY/` automatically in GitHub Actions and accepts `VITE_BASE` for local deployment checks. `public/manifest.webmanifest` and `public/sw.js` provide a deliberately small, best-effort installable/offline shell. No router, backend, analytics or remote Markdown service is used.
 
 ## File handling and OS integration
 
@@ -16,8 +22,8 @@ Rust owns UTF-8/BOM-aware reads and writes and validates Markdown extensions. Ta
 
 ## Startup and state
 
-The initial argument is read by a Rust command. Subsequent arguments from the single-instance plugin are delivered as events. The frontend keeps one small document state object and localStorage preferences. The editor surface is created only after Edit is selected.
+The initial argument is read by a Rust command. Subsequent arguments from the single-instance plugin are delivered as events. The frontend keeps one small document state object and localStorage preferences. The editor surface is created only after Edit is selected; the web build starts with the welcome/reader surface and initializes native `contenteditable` only when needed.
 
 ## Size expectations
 
-The frontend has no runtime framework and only small Tauri API/plugin clients. Native binary size and installer compression depend on platform WebView/runtime packaging; measure them with `npm run tauri build -- --no-bundle` and platform-specific bundle commands after the toolchain is installed.
+The frontend has no runtime framework and only small Tauri API/plugin clients. Measure the web artifact with `npm run web:build` and `node scripts/verify-web-build.mjs`. Native binary size and installer compression depend on platform WebView/runtime packaging; measure them with `npm run tauri build -- --no-bundle` and platform-specific bundle commands after the toolchain is installed.

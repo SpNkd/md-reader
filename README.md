@@ -1,6 +1,6 @@
 # MD Reader
 
-MD Reader is a small, focused desktop application for reading and lightly editing Markdown files. It is built with Tauri 2, Rust, TypeScript and Vite.
+MD Reader is a small, focused Markdown reader and visual editor. The same Vanilla TypeScript frontend runs as a Tauri desktop app and a static browser app.
 
 <p align="center"><i>Screenshot placeholder — a polished product screenshot can be added here.</i></p>
 
@@ -15,6 +15,16 @@ MD Reader is a small, focused desktop application for reading and lightly editin
 - UTF-8 and UTF-8 BOM support, including Cyrillic-safe file I/O.
 - Native File, Edit, View, Window and Help menus.
 - No account, telemetry, cloud sync, backend or database.
+
+## Web version
+
+Use MD Reader directly in your browser:
+
+[Open MD Reader online](https://spnkd.github.io/md-reader/)
+
+Files are processed locally in your browser. Nothing is uploaded.
+
+The web app supports opening and dropping `.md`/`.markdown` files, Read/Edit/Source modes, and saving back through the File System Access API where available. Other browsers download a Markdown copy with Blob. Relative local images and linked Markdown files cannot be read automatically by a browser sandbox; open those files explicitly.
 
 ## Download
 
@@ -68,13 +78,15 @@ sudo apt install ./*.deb
 
 ## Usage
 
-Open MD Reader and choose Open File or New File, drag a `.md` or `.markdown` file into the window, or pass a file path from the command line:
+In the desktop app, choose Open Markdown or New File, drag a `.md` or `.markdown` file into the window, or pass a file path from the command line:
 
 ```bash
 open -a "/Applications/MD Reader.app" "/path/to/document.md"
 ```
 
 Use Read for the rendered document, Edit for the visual editor, or Source for direct raw Markdown editing. New unsaved documents are named `Untitled.md` until you use Save As. Closing the window or choosing Quit exits the application; unsaved edits prompt before exit.
+
+In the web app, use Open Markdown, drag and drop, or Try an example. Save writes directly to the selected file in browsers that support the File System Access API; otherwise it downloads `Untitled.md` or the current document name.
 
 ## Keyboard shortcuts
 
@@ -99,6 +111,12 @@ npm install
 npm run tauri dev
 ```
 
+For the browser version, run:
+
+```bash
+npm run web:dev
+```
+
 System prerequisites:
 
 - Windows: Rust, Node.js 20+, Microsoft C++ Build Tools with “Desktop development with C++”, and WebView2. WebView2 is already present on supported Windows 10 and later installations in most cases.
@@ -121,8 +139,12 @@ Run the project checks:
 npm ci
 npm run check
 npm run build
+npm run web:build
+node scripts/verify-web-build.mjs
 cargo check --manifest-path src-tauri/Cargo.toml
 ```
+
+`npm run web:build` produces the static `dist/` artifact. GitHub Pages builds it with the repository base path automatically; set `VITE_BASE=/md-reader/` to reproduce that layout locally.
 
 Build a production bundle for the current operating system:
 
@@ -134,11 +156,13 @@ The GitHub release workflow builds Windows x64, macOS arm64/x86_64 and Linux x86
 
 ## Architecture
 
-The frontend is intentionally small Vanilla TypeScript and CSS. Rust owns file I/O, startup arguments, single-instance routing, native menus and packaging integration. See [ARCHITECTURE.md](ARCHITECTURE.md) for the technical rationale.
+The frontend is intentionally small Vanilla TypeScript and CSS. The reader, renderer, editor, state, themes and keyboard handling are shared by desktop and web. Browser file picking and saving live in `src/platform/web-document-provider.ts`; Rust owns desktop file I/O, startup arguments, single-instance routing, native menus and packaging integration. See [ARCHITECTURE.md](ARCHITECTURE.md) for the technical rationale.
 
 ## Privacy
 
 MD Reader is a local application. Markdown files are read and saved on the local computer; they are not uploaded, transmitted or sent to a remote service. The application has no analytics, telemetry, account system, cloud sync or backend server.
+
+The web version is static and keeps Markdown in the browser. It does not use cookies, tracking, analytics or a server API. A lightweight service worker caches only the static app shell for best-effort offline use after the first visit.
 
 ## File associations
 
@@ -147,6 +171,8 @@ The Tauri bundle declares `.md` and `.markdown` as Markdown document types. Afte
 ## Known limitations
 
 - The editor is a lightweight MVP, not a full Typora-style block editor. Complex Markdown constructs may be normalized when switching through Edit and saving.
+- Browser security prevents automatic access to neighboring files referenced by relative images or Markdown links. The web reader shows a safe placeholder for an unavailable local image and asks you to open linked Markdown explicitly.
+- File System Access API save-back is available only in supporting secure browsers; Firefox/Safari use a normal Markdown download.
 - Syntax highlighting, live preview split view, tabs, autosave and multi-window document management are outside the current MVP.
 - macOS releases need Apple Developer signing and notarization secrets for a warning-free first launch; the workflow is prepared for them.
 - Cross-platform installers are built in GitHub Actions; local verification on every target OS is still recommended.

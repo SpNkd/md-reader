@@ -1,6 +1,6 @@
 # Security policy
 
-MD Reader is a local desktop application, but Markdown files are untrusted input. The renderer must continue to escape raw HTML, allow-list external URL schemes and avoid turning document content into commands or arbitrary filesystem operations.
+MD Reader is a local desktop and browser application, but Markdown files are untrusted input. The renderer must continue to escape raw HTML, allow-list external URL schemes and avoid turning document content into commands or arbitrary filesystem operations. The web security fixture is `test-documents/security.md`; it contains script, event-handler, unsafe-URL and safe-link cases for manual browser smoke tests.
 
 Please report security issues privately through a GitHub Security Advisory once the repository is published. Do not open a public issue for an unpatched vulnerability.
 

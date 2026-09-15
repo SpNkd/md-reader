@@ -3,6 +3,8 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { pickMarkdownDocument, saveMarkdownDocument, type BrowserFileHandle } from "./platform/web-document-provider";
+import type { EditorController } from "./editor";
 import "./styles.css";
 
 type Mode = "read" | "edit" | "source";
@@ -11,6 +13,7 @@ type FontSize = "smaller" | "default" | "larger";
 
 interface DocumentState {
   path: string | null;
+  webHandle: BrowserFileHandle | null;
   name: string;
   markdown: string;
   savedMarkdown: string;
@@ -30,6 +33,7 @@ if (!app) throw new Error("App root is missing");
 
 const state: DocumentState = {
   path: null,
+  webHandle: null,
   name: "MD Reader",
   markdown: "",
   savedMarkdown: "",
@@ -38,8 +42,8 @@ const state: DocumentState = {
 };
 
 const preferences: Preferences = loadPreferences();
-let editor: HTMLDivElement | null = null;
-let savedEditorSelection: Range | null = null;
+let editorController: EditorController | null = null;
+let editorLoadId = 0;
 let menuOpen = false;
 let quitting = false;
 let unlistenOpenFile: UnlistenFn | undefined;
@@ -47,11 +51,30 @@ let unlistenNativeMenu: UnlistenFn | undefined;
 let unlistenExitRequested: UnlistenFn | undefined;
 const openingPaths = new Set<string>();
 
+const SAMPLE_MARKDOWN = `# Welcome to MD Reader
+
+This is a small Markdown document running entirely in your browser.
+
+## Try the basics
+
+- Switch between **Read**, **Edit**, and **Source**.
+- Edit a table directly in visual mode.
+- Use **Save** to write the document back or download a copy.
+
+| Feature | Where it works |
+| --- | --- |
+| Reading | Desktop and web |
+| Editing | Desktop and web |
+| Files | Local device only |
+
+> Your files stay on your device. Nothing is uploaded.
+`;
+
 app.innerHTML = `
   <main class="window-shell">
     <header class="topbar" aria-label="Document toolbar">
       <div class="window-title-group">
-        <span class="app-mark" aria-hidden="true">M</span>
+        <span class="app-mark" aria-hidden="true">.md</span>
         <span id="document-name" class="document-name">MD Reader</span>
         <span id="dirty-indicator" class="dirty-indicator" hidden aria-label="Unsaved changes">●</span>
       </div>
@@ -64,7 +87,7 @@ app.innerHTML = `
         <button id="menu-button" class="icon-button" type="button" aria-label="More options" aria-expanded="false">•••</button>
         <div id="menu" class="menu" hidden>
           <button id="menu-new" type="button">New Markdown File <span>⌘N</span></button>
-          <button id="menu-open" type="button">Open File <span>⌘O</span></button>
+          <button id="menu-open" type="button">Open Markdown <span>⌘O</span></button>
           <button id="menu-save" type="button">Save <span>⌘S</span></button>
           <button id="menu-save-as" type="button">Save As… <span>⇧⌘S</span></button>
           <div class="menu-divider"></div>
@@ -85,14 +108,16 @@ app.innerHTML = `
     <section id="workspace" class="workspace">
       <section id="welcome" class="welcome" aria-label="Welcome">
         <div class="welcome-card">
-          <div class="welcome-mark">M</div>
+          <div class="welcome-mark">.md</div>
           <h1>MD Reader</h1>
           <p>Drop a Markdown file here<br /><span>or</span></p>
           <div class="welcome-actions">
-            <button id="welcome-open" class="primary-button" type="button">Open File</button>
+            <button id="welcome-open" class="primary-button" type="button">Open Markdown</button>
             <button id="welcome-new" class="secondary-button" type="button">New File</button>
           </div>
+          <button id="welcome-demo" class="text-button" type="button">Try an example</button>
           <p class="welcome-hint">.md and .markdown</p>
+          <p class="privacy-note">Your files stay on your device.<br />Nothing is uploaded.</p>
         </div>
       </section>
       <article id="reader" class="content reader-content" hidden></article>
@@ -190,8 +215,11 @@ const dropOverlay = getElement<HTMLDivElement>("drop-overlay");
 bootstrap();
 
 async function bootstrap(): Promise<void> {
+  document.documentElement.classList.toggle("web-mode", !isTauri());
   applyPreferences();
   wireEvents();
+
+  if (!isTauri()) registerServiceWorker();
 
   if (isTauri()) {
     try {
@@ -226,6 +254,7 @@ async function bootstrap(): Promise<void> {
 function wireEvents(): void {
   getElement<HTMLButtonElement>("welcome-open").addEventListener("click", () => void chooseAndOpen());
   getElement<HTMLButtonElement>("welcome-new").addEventListener("click", () => void newDocument());
+  getElement<HTMLButtonElement>("welcome-demo").addEventListener("click", () => void openDemo());
   getElement<HTMLButtonElement>("menu-new").addEventListener("click", () => void newDocument());
   getElement<HTMLButtonElement>("menu-open").addEventListener("click", () => void chooseAndOpen());
   getElement<HTMLButtonElement>("menu-save").addEventListener("click", () => void saveDocument());
@@ -243,26 +272,6 @@ function wireEvents(): void {
   getElement<HTMLButtonElement>("menu-about").addEventListener("click", () => {
     closeMenu();
     aboutDialog.showModal();
-  });
-
-  editorToolbar.querySelectorAll<HTMLButtonElement>("[data-command]").forEach((button) => {
-    button.addEventListener("mousedown", (event) => event.preventDefault());
-    button.addEventListener("click", () => runEditorCommand(button.dataset.command ?? ""));
-  });
-  formatSelect.addEventListener("change", () => runEditorCommand("formatBlock", formatSelect.value));
-  tableDialog.addEventListener("close", () => {
-    if (tableDialog.returnValue !== "insert" || !editor) return;
-    const rows = parseTableDimension(tableRowsInput.value, 2, 20);
-    const columns = parseTableDimension(tableColumnsInput.value, 1, 10);
-    if (rows === null || columns === null) {
-      showToast("Please choose 2–20 rows and 1–10 columns");
-      return;
-    }
-    restoreEditorSelection();
-    document.execCommand("insertHTML", false, createTableHtml(rows, columns));
-    syncFromEditor();
-    rememberEditorSelection();
-    updateToolbarState();
   });
 
   document.querySelectorAll<HTMLButtonElement>("[data-theme]").forEach((button) => {
@@ -321,8 +330,7 @@ function wireEvents(): void {
       applyPreferences();
     } else if (state.mode === "edit" && (key === "b" || key === "i")) {
       event.preventDefault();
-      document.execCommand(key === "b" ? "bold" : "italic");
-      syncFromEditor();
+      editorController?.runCommand(key === "b" ? "bold" : "italic");
     }
   });
 
@@ -333,10 +341,11 @@ function wireEvents(): void {
     const mdPath = link.dataset.mdPath;
     if (mdPath) {
       event.preventDefault();
-      void openDocument(mdPath);
+      if (isTauri()) void openDocument(mdPath);
+      else showToast("Open linked Markdown files with Open Markdown");
     } else if (link.dataset.externalUrl) {
       event.preventDefault();
-      void openUrl(link.dataset.externalUrl);
+      void openExternalUrl(link.dataset.externalUrl);
     }
   });
 
@@ -410,21 +419,19 @@ async function readDroppedBrowserFile(file: File): Promise<void> {
     showToast("Please choose a .md or .markdown file");
     return;
   }
-  const content = await file.text();
-  await replaceDocument({ path: null, name: file.name, content });
+  try {
+    const content = await file.text();
+    await replaceDocument({ path: null, webHandle: null, name: file.name, content });
+  } catch (error) {
+    showToast(`Could not open file: ${errorMessage(error)}`);
+  }
 }
 
 async function chooseAndOpen(): Promise<void> {
   closeMenu();
   if (!isTauri()) {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".md,.markdown,text/markdown,text/plain";
-    input.addEventListener("change", () => {
-      const file = input.files?.[0];
-      if (file) void readDroppedBrowserFile(file);
-    }, { once: true });
-    input.click();
+    const selected = await pickMarkdownDocument();
+    if (selected) await replaceDocument({ path: null, webHandle: selected.handle, name: selected.name, content: selected.content });
     return;
   }
   const selected = await open({
@@ -439,17 +446,29 @@ async function newDocument(): Promise<void> {
   closeMenu();
   if (!(await confirmBeforeReplacing())) return;
   state.path = null;
+  state.webHandle = null;
   state.name = "Untitled.md";
   state.markdown = "";
   state.savedMarkdown = "";
   state.dirty = false;
   state.mode = "edit";
-  editor = null;
+  editorController?.destroy();
+  editorController = null;
   renderState();
-  window.setTimeout(() => editor?.focus(), 0);
+  window.setTimeout(() => editorController?.focus(), 0);
+}
+
+async function openDemo(): Promise<void> {
+  closeMenu();
+  if (!(await confirmBeforeReplacing())) return;
+  await replaceDocument({ path: null, webHandle: null, name: "Example.md", content: SAMPLE_MARKDOWN });
 }
 
 async function openDocument(path: string): Promise<void> {
+  if (!isTauri()) {
+    showToast("Open linked Markdown files with Open Markdown");
+    return;
+  }
   if (!isMarkdownPath(path)) {
     showToast("MD Reader opens .md and .markdown files");
     return;
@@ -462,7 +481,7 @@ async function openDocument(path: string): Promise<void> {
   }
   try {
     const content = await invoke<string>("read_markdown", { path });
-    await replaceDocument({ path, name: fileName(path), content });
+    await replaceDocument({ path, webHandle: null, name: fileName(path), content });
   } catch (error) {
     showToast(`Could not open file: ${errorMessage(error)}`);
   } finally {
@@ -470,14 +489,16 @@ async function openDocument(path: string): Promise<void> {
   }
 }
 
-async function replaceDocument(document: { path: string | null; name: string; content: string }): Promise<void> {
+async function replaceDocument(document: { path: string | null; webHandle: BrowserFileHandle | null; name: string; content: string }): Promise<void> {
   state.path = document.path;
+  state.webHandle = document.webHandle;
   state.name = document.name;
   state.markdown = document.content;
   state.savedMarkdown = document.content;
   state.dirty = false;
   state.mode = "read";
-  editor = null;
+  editorController?.destroy();
+  editorController = null;
   renderState();
 }
 
@@ -504,26 +525,30 @@ function renderState(): void {
   getElement<HTMLButtonElement>("source-button").classList.toggle("active", state.mode === "source");
 
   if (!hasDocument) {
+    editorLoadId += 1;
+    editorController?.destroy();
+    editorController = null;
     reader.innerHTML = "";
     editorHost.innerHTML = "";
     sourceEditor.value = "";
     return;
   }
   if (state.mode === "read") {
+    editorLoadId += 1;
+    editorController?.destroy();
+    editorController = null;
     reader.innerHTML = renderMarkdown(state.markdown, state.path);
-    editor = null;
   } else if (state.mode === "edit") {
-    editorHost.innerHTML = `<div class="editor-surface" contenteditable="true" role="textbox" aria-label="Markdown editor" spellcheck="true">${renderMarkdown(state.markdown, state.path)}</div>`;
-    editor = editorHost.querySelector<HTMLDivElement>(".editor-surface");
-    savedEditorSelection = null;
-    editor?.addEventListener("input", syncFromEditor);
-    editor?.addEventListener("keyup", updateToolbarState);
-    editor?.addEventListener("mouseup", updateToolbarState);
-    editor?.addEventListener("blur", rememberEditorSelection);
-    updateToolbarState();
+    editorController?.destroy();
+    editorController = null;
+    editorHost.innerHTML = `<div class="editor-loading">Loading editor…</div>`;
+    const loadId = ++editorLoadId;
+    void loadEditor(loadId);
   } else {
+    editorLoadId += 1;
+    editorController?.destroy();
+    editorController = null;
     sourceEditor.value = state.markdown;
-    editor = null;
     window.setTimeout(() => {
       if (state.mode === "source" && !sourceEditor.hidden) sourceEditor.focus();
     }, 0);
@@ -531,78 +556,32 @@ function renderState(): void {
   updateMenuChecks();
 }
 
-function runEditorCommand(command: string, value?: string): void {
-  if (!editor) return;
-  restoreEditorSelection();
-  if (command === "createLink") {
-    const url = window.prompt("Link URL", "https://");
-    if (!url) return;
-    document.execCommand("createLink", false, url.trim());
-  } else if (command === "createTable") {
-    rememberEditorSelection();
-    tableRowsInput.value = "3";
-    tableColumnsInput.value = "3";
-    tableDialog.returnValue = "";
-    tableDialog.showModal();
-    return;
-  } else if (command === "blockquote") {
-    document.execCommand("formatBlock", false, "blockquote");
-  } else if (command === "formatBlock") {
-    document.execCommand("formatBlock", false, value ?? "p");
-  } else {
-    document.execCommand(command, false);
+async function loadEditor(loadId: number): Promise<void> {
+  try {
+    const { mountEditor } = await import("./editor");
+    if (loadId !== editorLoadId || state.mode !== "edit") return;
+    editorController = mountEditor({
+      host: editorHost,
+      toolbar: editorToolbar,
+      formatSelect,
+      tableDialog,
+      tableRowsInput,
+      tableColumnsInput,
+      markdown: state.markdown,
+      documentPath: state.path,
+      renderMarkdown,
+      onChange: (markdown) => {
+        state.markdown = markdown;
+        state.dirty = state.markdown !== state.savedMarkdown;
+        dirtyIndicator.hidden = !state.dirty;
+        updateEmptyState();
+      },
+      onInvalidLink: () => showToast("Only http, https, mailto, tel, and Markdown links are allowed"),
+    });
+    editorController.focus();
+  } catch (error) {
+    if (loadId === editorLoadId && state.mode === "edit") showToast(`Could not load editor: ${errorMessage(error)}`);
   }
-  syncFromEditor();
-  rememberEditorSelection();
-  updateToolbarState();
-}
-
-function parseTableDimension(input: string, minimum: number, maximum: number): number | null {
-  const value = Number.parseInt(input, 10);
-  return Number.isInteger(value) && value >= minimum && value <= maximum ? value : null;
-}
-
-function createTableHtml(rows: number, columns: number): string {
-  const header = Array.from({ length: columns }, (_, index) => `<th>Header ${index + 1}</th>`).join("");
-  const body = Array.from({ length: rows - 1 }, () => `<tr>${Array.from({ length: columns }, () => "<td>Cell</td>").join("")}</tr>`).join("");
-  return `<div class="table-scroll"><table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div><p><br></p>`;
-}
-
-function updateToolbarState(): void {
-  if (!editor) return;
-  editorToolbar.querySelectorAll<HTMLButtonElement>("[data-command]").forEach((button) => {
-    const command = button.dataset.command;
-    const active = command ? ["bold", "italic", "strikeThrough", "insertUnorderedList", "insertOrderedList"].includes(command) && document.queryCommandState(command) : false;
-    button.classList.toggle("active", active);
-  });
-  const block = document.queryCommandValue("formatBlock").replace(/[<>]/g, "").toLowerCase();
-  const normalizedBlock = block === "div" ? "p" : block;
-  if (["p", "h1", "h2", "h3", "blockquote", "pre"].includes(normalizedBlock)) formatSelect.value = normalizedBlock;
-}
-
-function rememberEditorSelection(): void {
-  if (!editor) return;
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) return;
-  const range = selection.getRangeAt(0);
-  if (editor.contains(range.commonAncestorContainer)) savedEditorSelection = range.cloneRange();
-}
-
-function restoreEditorSelection(): void {
-  editor?.focus();
-  if (!savedEditorSelection) return;
-  const selection = window.getSelection();
-  if (!selection) return;
-  selection.removeAllRanges();
-  selection.addRange(savedEditorSelection);
-}
-
-function syncFromEditor(): void {
-  if (!editor) return;
-  state.markdown = htmlToMarkdown(editor);
-  state.dirty = state.markdown !== state.savedMarkdown;
-  dirtyIndicator.hidden = !state.dirty;
-  updateEmptyState();
 }
 
 function syncFromSource(): void {
@@ -613,7 +592,7 @@ function syncFromSource(): void {
 }
 
 function syncFromActiveEditor(): void {
-  if (state.mode === "edit") syncFromEditor();
+  if (state.mode === "edit") editorController?.sync();
   else if (state.mode === "source") syncFromSource();
 }
 
@@ -623,8 +602,25 @@ function updateEmptyState(): void {
 }
 
 async function saveDocument(): Promise<boolean> {
-  if (!state.path) return saveAs();
+  closeMenu();
   syncFromActiveEditor();
+  if (!isTauri()) {
+    try {
+      const saved = await saveMarkdownDocument(state.markdown, state.name, state.webHandle);
+      if (!saved) return false;
+      state.name = saved.name;
+      state.webHandle = saved.handle;
+      state.savedMarkdown = state.markdown;
+      state.dirty = false;
+      dirtyIndicator.hidden = true;
+      showToast(saved.handle ? "Saved" : "Downloaded .md");
+      return true;
+    } catch (error) {
+      showToast(`Could not save file: ${errorMessage(error)}`);
+      return false;
+    }
+  }
+  if (!state.path) return saveAs();
   try {
     await invoke("write_markdown", { path: state.path, content: state.markdown });
     state.savedMarkdown = state.markdown;
@@ -641,6 +637,23 @@ async function saveDocument(): Promise<boolean> {
 async function saveAs(): Promise<boolean> {
   closeMenu();
   syncFromActiveEditor();
+  if (!isTauri()) {
+    try {
+      const saved = await saveMarkdownDocument(state.markdown, state.name, null);
+      if (!saved) return false;
+      state.path = null;
+      state.name = saved.name;
+      state.webHandle = saved.handle;
+      state.savedMarkdown = state.markdown;
+      state.dirty = false;
+      renderState();
+      showToast(saved.handle ? "Saved" : "Downloaded .md");
+      return true;
+    } catch (error) {
+      showToast(`Could not save file: ${errorMessage(error)}`);
+      return false;
+    }
+  }
   const selected = await saveDialog({
     defaultPath: state.path ?? "untitled.md",
     filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
@@ -650,6 +663,7 @@ async function saveAs(): Promise<boolean> {
   try {
     await invoke("write_markdown", { path, content: state.markdown });
     state.path = path;
+    state.webHandle = null;
     state.name = fileName(path);
     state.savedMarkdown = state.markdown;
     state.dirty = false;
@@ -733,6 +747,21 @@ function loadPreferences(): Preferences {
 
 function savePreferences(): void {
   localStorage.setItem("md-reader-preferences", JSON.stringify(preferences));
+}
+
+function registerServiceWorker(): void {
+  if (!("serviceWorker" in navigator)) return;
+  void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {
+    // Offline support is best effort; the reader still works without a service worker.
+  });
+}
+
+async function openExternalUrl(url: string): Promise<void> {
+  if (isTauri()) {
+    await openUrl(url);
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 function getElement<T extends HTMLElement>(id: string): T {
@@ -851,7 +880,9 @@ function inlineMarkdown(value: string, baseDir: string): string {
   text = text.replace(/!\[([^\]]*)\]\((\S+?)(?:\s+["']([^"']*)["'])?\)/g, (_, alt: string, source: string, title?: string) => {
     const original = decodeHtml(source);
     const src = imageSource(original, baseDir);
-    if (!src) return escapeHtml(alt);
+    if (!src) {
+      return stash(`<span class="missing-image" data-md-src="${escapeAttribute(original)}" data-md-alt="${escapeAttribute(alt)}" role="img" aria-label="Image unavailable">🖼 ${escapeHtml(alt || original)}</span>`);
+    }
     return stash(`<img src="${escapeAttribute(src)}" data-md-src="${escapeAttribute(original)}" alt="${escapeAttribute(alt)}"${title ? ` title="${escapeAttribute(title)}"` : ""}>`);
   });
   text = text.replace(/\[([^\]]+)\]\((\S+?)(?:\s+["']([^"']*)["'])?\)/g, (_, label: string, href: string, title?: string) => {
@@ -861,7 +892,7 @@ function inlineMarkdown(value: string, baseDir: string): string {
     return stash(`<a ${attributes}${title ? ` title="${escapeAttribute(title)}"` : ""}>${label}</a>`);
   });
   text = text.replace(/`([^`\n]+)`/g, (_, code: string) => stash(`<code>${code}</code>`));
-  text = text.replace(/(https?:\/\/[^\s<]+)/g, (url: string) => stash(`<a href="${escapeAttribute(url)}" data-external-url="${escapeAttribute(url)}" rel="noreferrer">${url}</a>`));
+  text = text.replace(/(https?:\/\/[^\s<]+)/g, (url: string) => stash(`<a href="${escapeAttribute(url)}" data-external-url="${escapeAttribute(url)}" rel="noopener noreferrer">${url}</a>`));
   text = text.replace(/\*\*(.+?)\*\*|__(.+?)__/g, (_, strongA: string, strongB: string) => `<strong>${strongA ?? strongB}</strong>`);
   text = text.replace(/~~(.+?)~~/g, "<del>$1</del>");
   text = text.replace(/(?<!\*)\*([^*\n]+)\*|(?<!_)_([^_\n]+)_(?!_)/g, (_, italicA: string, italicB: string) => `<em>${italicA ?? italicB}</em>`);
@@ -871,16 +902,20 @@ function inlineMarkdown(value: string, baseDir: string): string {
 }
 
 function linkAttributes(href: string, baseDir: string): string | null {
-  if (/^(javascript|vbscript|data):/i.test(href)) return null;
-  if (/^(https?:|mailto:|tel:)/i.test(href)) return `href="${escapeAttribute(href)}" data-external-url="${escapeAttribute(href)}" rel="noreferrer"`;
+  if (!isAllowedLinkUrl(href)) return null;
+  if (/^(https?:|mailto:|tel:)/i.test(href)) return `href="${escapeAttribute(href)}" data-external-url="${escapeAttribute(href)}" rel="noopener noreferrer"`;
   const path = resolvePath(baseDir, href);
   if (!isMarkdownPath(path)) return null;
   return `href="#" data-md-path="${escapeAttribute(path)}"`;
 }
 
+function isAllowedLinkUrl(href: string): boolean {
+  return !/^[A-Za-z][A-Za-z\d+.-]*:/i.test(href) || /^(https?:|mailto:|tel:)/i.test(href);
+}
+
 function imageSource(source: string, baseDir: string): string | null {
-  if (/^data:image\//i.test(source) || /^https?:\/\//i.test(source)) return source;
-  if (/^(javascript|vbscript|data):/i.test(source)) return null;
+  if (/^data:image\/(?:png|jpe?g|gif|webp|avif|bmp);/i.test(source) || /^https?:\/\//i.test(source)) return source;
+  if (/^[A-Za-z][A-Za-z\d+.-]*:/i.test(source) || !isTauri()) return null;
   const absolutePath = resolvePath(baseDir, source);
   return isTauri() ? convertFileSrc(absolutePath) : absolutePath;
 }
@@ -944,66 +979,6 @@ function renderTable(lines: string[], baseDir: string): string {
   const head = headers.map((cell) => `<th>${inlineMarkdown(cell, baseDir)}</th>`).join("");
   const body = rows.map((row) => `<tr>${headers.map((_, i) => `<td>${inlineMarkdown(row[i] ?? "", baseDir)}</td>`).join("")}</tr>`).join("");
   return `<div class="table-scroll"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
-}
-
-function htmlToMarkdown(root: HTMLElement): string {
-  const blocks = Array.from(root.children).map((child) => nodeToMarkdown(child)).filter(Boolean);
-  const markdown = blocks.join("\n\n").replace(/[ \t]+\n/g, "\n").trim();
-  return markdown ? `${markdown}\n` : "";
-}
-
-function nodeToMarkdown(node: Node): string {
-  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
-  if (!(node instanceof HTMLElement)) return Array.from(node.childNodes).map(nodeToMarkdown).join("");
-  const children = () => Array.from(node.childNodes).map(nodeToMarkdown).join("");
-  switch (node.tagName.toLowerCase()) {
-    case "h1": case "h2": case "h3": case "h4": case "h5": case "h6":
-      return `${"#".repeat(Number(node.tagName.slice(1)))} ${children().trim()}`;
-    case "p": return children().trim();
-    case "strong": case "b": return `**${children()}**`;
-    case "em": case "i": return `*${children()}*`;
-    case "del": case "s": return `~~${children()}~~`;
-    case "code": return node.parentElement?.tagName.toLowerCase() === "pre" ? children() : `\`${children()}\``;
-    case "pre": return `\`\`\`\n${children().replace(/\n$/, "")}\n\`\`\``;
-    case "br": return "  \n";
-    case "hr": return "---";
-    case "blockquote": return children().split("\n").map((line) => `> ${line}`).join("\n");
-    case "a": {
-      const href = node.dataset.mdPath || node.dataset.externalUrl || node.getAttribute("href") || "";
-      return `[${children()}](${href})`;
-    }
-    case "img": return `![${node.getAttribute("alt") ?? ""}](${node.dataset.mdSrc ?? node.getAttribute("src") ?? ""})`;
-    case "ul": case "ol": return listToMarkdown(node, node.tagName.toLowerCase() === "ol");
-    case "li": return children().trim();
-    case "table": return tableToMarkdown(node);
-    case "div": return children().trim();
-    case "input": return node.getAttribute("type") === "checkbox" ? `[${node.hasAttribute("checked") ? "x" : " "}]` : "";
-    default: return children();
-  }
-}
-
-function listToMarkdown(list: HTMLElement, ordered: boolean, depth = 0): string {
-  const indent = "  ".repeat(depth);
-  return Array.from(list.children).filter((child): child is HTMLElement => child.tagName.toLowerCase() === "li").map((item, index) => {
-    const nested = Array.from(item.children).find((child) => child.tagName.toLowerCase() === (ordered ? "ol" : "ul")) as HTMLElement | undefined;
-    const clone = item.cloneNode(true) as HTMLElement;
-    clone.querySelectorAll("ul, ol").forEach((child) => child.remove());
-    let text = Array.from(clone.childNodes).map(nodeToMarkdown).join("").trim();
-    const checkbox = item.querySelector<HTMLInputElement>("input[type=checkbox]");
-    if (checkbox) text = `[${checkbox.checked ? "x" : " "}] ${text.replace(/^\[[ xX]\]\s*/, "")}`;
-    const marker = ordered ? `${index + 1}.` : "-";
-    return `${indent}${marker} ${text}${nested ? `\n${listToMarkdown(nested, nested.tagName.toLowerCase() === "ol", depth + 1)}` : ""}`;
-  }).join("\n");
-}
-
-function tableToMarkdown(table: HTMLElement): string {
-  const rows = Array.from(table.querySelectorAll("tr")).map((row) => Array.from(row.children).map((cell) => nodeToMarkdown(cell).replace(/\n/g, " ").trim()));
-  if (rows.length === 0) return "";
-  return [
-    `| ${rows[0].join(" | ")} |`,
-    `| ${rows[0].map(() => "---").join(" | ")} |`,
-    ...rows.slice(1).map((row) => `| ${row.join(" | ")} |`),
-  ].join("\n");
 }
 
 function escapeHtml(value: string): string {

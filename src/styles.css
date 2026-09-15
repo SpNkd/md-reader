@@ -42,7 +42,7 @@ button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible { 
 .window-title-group, .toolbar-actions, .mode-switch { display: flex; align-items: center; }
 .window-title-group { gap: 9px; min-width: 0; }
 .app-mark, .welcome-mark { display: grid; place-items: center; background: var(--text); color: var(--background); font-weight: 800; border-radius: 7px; }
-.app-mark { width: 23px; height: 23px; font-size: 13px; }
+.app-mark { width: 30px; height: 23px; font-size: 10px; letter-spacing: -.08em; }
 .document-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; }
 .dirty-indicator { color: #e08b35; font-size: 14px; line-height: 1; }
 .toolbar-actions { gap: 10px; position: relative; }
@@ -83,6 +83,7 @@ button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible { 
 .reader-content input[type="checkbox"], .editor-surface input[type="checkbox"] { accent-color: var(--accent); margin: 0 .5em .15em 0; vertical-align: middle; }
 .reader-content hr, .editor-surface hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
 .reader-content img, .editor-surface img { display: block; max-width: 100%; height: auto; margin: 1.2em auto; border-radius: 8px; }
+.missing-image { display: inline-flex; align-items: center; gap: .35em; max-width: 100%; padding: .45em .65em; border: 1px dashed var(--border); border-radius: 7px; color: var(--text-muted); background: var(--surface-muted); font-size: .88em; overflow-wrap: anywhere; }
 .table-scroll { overflow-x: auto; margin: 1.2em 0; }
 .reader-content table, .editor-surface table { width: 100%; border-collapse: collapse; font-size: .93em; }
 .reader-content th, .reader-content td, .editor-surface th, .editor-surface td { padding: .55em .75em; border: 1px solid var(--border); text-align: left; }
@@ -109,7 +110,7 @@ button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible { 
 
 .welcome { height: 100%; display: grid; place-items: center; padding-bottom: 7vh; }
 .welcome-card { text-align: center; }
-.welcome-mark { width: 54px; height: 54px; margin: 0 auto 18px; border-radius: 15px; font-size: 26px; }
+.welcome-mark { width: 64px; height: 54px; margin: 0 auto 18px; border-radius: 15px; font-size: 21px; letter-spacing: -.1em; }
 .welcome h1 { margin: 0 0 10px; font-size: 23px; letter-spacing: -.02em; }
 .welcome p { margin: 0 0 17px; color: var(--text-muted); line-height: 1.6; font-size: 14px; }
 .welcome p span { display: inline-block; margin: 7px 0 0; font-size: 12px; }
@@ -119,12 +120,15 @@ button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible { 
 .primary-button:hover { filter: brightness(1.08); }
 .secondary-button { border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); padding: 8px 15px; cursor: pointer; font-size: 13px; font-weight: 600; }
 .secondary-button:hover { background: var(--surface-muted); }
+.text-button { border: 0; margin-top: 17px; padding: 0; color: var(--accent); background: transparent; cursor: pointer; font-size: 13px; }
+.text-button:hover { text-decoration: underline; text-underline-offset: 3px; }
 .empty-state { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-muted); font-size: 14px; pointer-events: none; }
 .drop-overlay { position: absolute; inset: 0; z-index: 10; display: grid; place-items: center; background: color-mix(in srgb, var(--background) 80%, var(--accent)); border: 2px dashed var(--accent); }
 .drop-card { display: grid; gap: 5px; justify-items: center; padding: 28px 40px; border-radius: 14px; background: var(--surface); box-shadow: 0 10px 30px rgba(0,0,0,.12); }
 .drop-icon { font-size: 25px; color: var(--accent); }
 .drop-card span:last-child { color: var(--text-muted); font-size: 13px; }
 .toast { position: fixed; left: 50%; bottom: 24px; z-index: 50; transform: translateX(-50%); padding: 9px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: 0 8px 22px rgba(0,0,0,.15); font-size: 13px; }
+.privacy-note { margin-top: 24px !important; margin-bottom: 0 !important; color: var(--text-muted); font-size: 11px !important; line-height: 1.5 !important; opacity: .85; }
 
 .confirm-dialog { width: min(390px, calc(100% - 36px)); padding: 0; border: 1px solid var(--border); border-radius: 12px; color: var(--text); background: var(--surface); box-shadow: 0 20px 60px rgba(0,0,0,.28); }
 .confirm-dialog::backdrop { background: rgba(0,0,0,.32); }
@@ -165,4 +169,8 @@ button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible { 
   .editor-host { width: calc(100% - 28px); }
   .source-editor { width: calc(100% - 28px); }
   .mode-button { padding-inline: 8px; }
+  .welcome { padding: 22px; }
+  .welcome-actions { flex-direction: column; }
+  .welcome-actions button { width: min(260px, 100%); }
+  .privacy-note { margin-top: 20px !important; }
 }

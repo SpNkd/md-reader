@@ -1,0 +1,18 @@
+{
+  "name": "MD Reader",
+  "short_name": "MD Reader",
+  "description": "A small, private Markdown reader and editor.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f7f5",
+  "theme_color": "#f7f7f5",
+  "icons": [
+    {
+      "src": "./icons/md-reader.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
