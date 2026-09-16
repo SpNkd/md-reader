@@ -183,7 +183,7 @@ app.innerHTML = `
       <div class="about-content">
         <div class="about-mark">.md</div>
         <h2>MD Reader</h2>
-        <p class="about-version">Version 0.2.0</p>
+        <p class="about-version">Version 0.2.1</p>
         <p>A focused, local Markdown reader and visual editor.</p>
         <p class="about-note">Your Markdown files stay on this computer. MD Reader does not upload or send them anywhere.</p>
         <a href="#" data-external-url="https://github.com/SpNkd/md-reader">View project on GitHub ↗</a>
