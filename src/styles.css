@@ -61,6 +61,18 @@ button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible { 
 .menu-divider { height: 1px; margin: 5px 4px; background: var(--border); }
 .check { width: 16px; text-align: center; color: var(--accent); font-weight: 700; }
 
+.tab-bar { min-height: 39px; display: flex; align-items: stretch; gap: 3px; overflow-x: auto; padding: 4px 14px 0; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 76%, transparent); scrollbar-width: thin; }
+.tab-item { min-width: 0; display: flex; align-items: stretch; border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0; background: transparent; }
+.tab-item.active { border-color: var(--border); background: var(--background); }
+.tab-select, .tab-close, .tab-add { border: 0; color: var(--text-muted); background: transparent; cursor: pointer; }
+.tab-select { min-width: 84px; max-width: 220px; display: flex; align-items: center; gap: 6px; padding: 7px 6px 7px 11px; text-align: left; }
+.tab-item.active .tab-select { color: var(--text); }
+.tab-select:hover, .tab-close:hover, .tab-add:hover { color: var(--text); background: var(--surface-muted); }
+.tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.tab-dirty { color: #e08b35; font-size: 10px; line-height: 1; }
+.tab-close { width: 25px; margin: 4px 3px 4px 0; border-radius: 5px; font-size: 17px; line-height: 1; }
+.tab-add { flex: 0 0 29px; align-self: center; height: 28px; margin-left: 3px; border-radius: 6px; font-size: 20px; line-height: 1; }
+
 .workspace { position: relative; flex: 1; overflow: auto; }
 .content { width: min(100% - 44px, 830px); margin: 0 auto; padding: 58px 0 100px; transform: scale(var(--zoom)); transform-origin: top center; }
 .reader-content, .editor-surface { font-size: var(--content-size); line-height: 1.7; }
@@ -164,6 +176,7 @@ button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible { 
 
 @media (max-width: 640px) {
   .topbar { padding-inline: 12px; }
+  .tab-bar { padding-inline: 8px; }
   .content { width: min(100% - 28px, 830px); padding-top: 34px; }
   .editor-toolbar { width: calc(100% - 28px); overflow-x: auto; }
   .editor-host { width: calc(100% - 28px); }

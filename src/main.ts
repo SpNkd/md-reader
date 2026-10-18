@@ -12,6 +12,7 @@ type Theme = "system" | "light" | "dark";
 type FontSize = "smaller" | "default" | "larger";
 
 interface DocumentState {
+  id: string;
   path: string | null;
   webHandle: BrowserFileHandle | null;
   name: string;
@@ -28,18 +29,35 @@ interface Preferences {
   zoom: number;
 }
 
+interface DocumentInput {
+  path: string | null;
+  webHandle: BrowserFileHandle | null;
+  name: string;
+  content: string;
+  mode?: Mode;
+}
+
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root is missing");
 
-const state: DocumentState = {
-  path: null,
-  webHandle: null,
-  name: "MD Reader",
-  markdown: "",
-  savedMarkdown: "",
-  dirty: false,
-  mode: "read",
-};
+let nextTabId = 1;
+const tabs: DocumentState[] = [];
+let activeTabId: string | null = null;
+
+function createDocument(input: DocumentInput): DocumentState {
+  return {
+    id: `tab-${nextTabId++}`,
+    path: input.path,
+    webHandle: input.webHandle,
+    name: input.name,
+    markdown: input.content,
+    savedMarkdown: input.content,
+    dirty: false,
+    mode: input.mode ?? "read",
+  };
+}
+
+let state: DocumentState = createDocument({ path: null, webHandle: null, name: "MD Reader", content: "" });
 
 const preferences: Preferences = loadPreferences();
 let editorController: EditorController | null = null;
@@ -105,6 +123,7 @@ app.innerHTML = `
         </div>
       </nav>
     </header>
+    <div id="tab-bar" class="tab-bar" role="tablist" aria-label="Open documents" hidden></div>
     <section id="workspace" class="workspace">
       <section id="welcome" class="welcome" aria-label="Welcome">
         <div class="welcome-card">
@@ -183,7 +202,7 @@ app.innerHTML = `
       <div class="about-content">
         <div class="about-mark">.md</div>
         <h2>MD Reader</h2>
-        <p class="about-version">Version 0.2.1</p>
+        <p class="about-version">Version 0.3.0</p>
         <p>A focused, local Markdown reader and visual editor.</p>
         <p class="about-note">Your Markdown files stay on this computer. MD Reader does not upload or send them anywhere.</p>
         <a href="#" data-external-url="https://github.com/SpNkd/md-reader">View project on GitHub ↗</a>
@@ -195,6 +214,7 @@ app.innerHTML = `
 
 const documentName = getElement<HTMLSpanElement>("document-name");
 const dirtyIndicator = getElement<HTMLSpanElement>("dirty-indicator");
+const tabBar = getElement<HTMLDivElement>("tab-bar");
 const reader = getElement<HTMLElement>("reader");
 const editorHost = getElement<HTMLDivElement>("editor-host");
 const welcome = getElement<HTMLElement>("welcome");
@@ -314,6 +334,9 @@ function wireEvents(): void {
     } else if (key === "s") {
       event.preventDefault();
       void saveDocument();
+    } else if (key === "w") {
+      event.preventDefault();
+      void closeTab();
     } else if (key === "e") {
       event.preventDefault();
       void setMode(state.mode === "read" ? "edit" : "read");
@@ -392,8 +415,16 @@ function wireEvents(): void {
 async function requestQuit(): Promise<void> {
   if (quitting) return;
   syncFromActiveEditor();
-  if (state.dirty) {
-    const choice = await askSaveChanges();
+  for (const tab of tabs) {
+    if (!tab.dirty) continue;
+    if (activeTabId !== tab.id) {
+      activeTabId = tab.id;
+      state = tab;
+      editorController?.destroy();
+      editorController = null;
+      renderState();
+    }
+    const choice = await askSaveChanges(tab.name);
     if (choice === "save") {
       const saved = await saveDocument();
       if (!saved) return;
@@ -421,7 +452,7 @@ async function readDroppedBrowserFile(file: File): Promise<void> {
   }
   try {
     const content = await file.text();
-    await replaceDocument({ path: null, webHandle: null, name: file.name, content });
+    addDocument({ path: null, webHandle: null, name: file.name, content });
   } catch (error) {
     showToast(`Could not open file: ${errorMessage(error)}`);
   }
@@ -431,7 +462,7 @@ async function chooseAndOpen(): Promise<void> {
   closeMenu();
   if (!isTauri()) {
     const selected = await pickMarkdownDocument();
-    if (selected) await replaceDocument({ path: null, webHandle: selected.handle, name: selected.name, content: selected.content });
+    if (selected) addDocument({ path: null, webHandle: selected.handle, name: selected.name, content: selected.content });
     return;
   }
   const selected = await open({
@@ -444,24 +475,13 @@ async function chooseAndOpen(): Promise<void> {
 
 async function newDocument(): Promise<void> {
   closeMenu();
-  if (!(await confirmBeforeReplacing())) return;
-  state.path = null;
-  state.webHandle = null;
-  state.name = "Untitled.md";
-  state.markdown = "";
-  state.savedMarkdown = "";
-  state.dirty = false;
-  state.mode = "edit";
-  editorController?.destroy();
-  editorController = null;
-  renderState();
+  addDocument({ path: null, webHandle: null, name: "Untitled.md", content: "", mode: "edit" });
   window.setTimeout(() => editorController?.focus(), 0);
 }
 
 async function openDemo(): Promise<void> {
   closeMenu();
-  if (!(await confirmBeforeReplacing())) return;
-  await replaceDocument({ path: null, webHandle: null, name: "Example.md", content: SAMPLE_MARKDOWN });
+  addDocument({ path: null, webHandle: null, name: "Example.md", content: SAMPLE_MARKDOWN });
 }
 
 async function openDocument(path: string): Promise<void> {
@@ -473,15 +493,16 @@ async function openDocument(path: string): Promise<void> {
     showToast("MD Reader opens .md and .markdown files");
     return;
   }
-  if (openingPaths.has(path) || (state.path === path && !state.dirty)) return;
-  openingPaths.add(path);
-  if (!(await confirmBeforeReplacing())) {
-    openingPaths.delete(path);
+  const existingTab = tabs.find((tab) => tab.path === path);
+  if (existingTab) {
+    activateTab(existingTab.id);
     return;
   }
+  if (openingPaths.has(path)) return;
+  openingPaths.add(path);
   try {
     const content = await invoke<string>("read_markdown", { path });
-    await replaceDocument({ path, webHandle: null, name: fileName(path), content });
+    addDocument({ path, webHandle: null, name: fileName(path), content });
   } catch (error) {
     showToast(`Could not open file: ${errorMessage(error)}`);
   } finally {
@@ -489,14 +510,68 @@ async function openDocument(path: string): Promise<void> {
   }
 }
 
-async function replaceDocument(document: { path: string | null; webHandle: BrowserFileHandle | null; name: string; content: string }): Promise<void> {
-  state.path = document.path;
-  state.webHandle = document.webHandle;
-  state.name = document.name;
-  state.markdown = document.content;
-  state.savedMarkdown = document.content;
-  state.dirty = false;
-  state.mode = "read";
+function addDocument(document: DocumentInput): void {
+  const tab = createDocument(document);
+  tabs.push(tab);
+  activeTabId = tab.id;
+  state = tab;
+  editorController?.destroy();
+  editorController = null;
+  renderState();
+}
+
+function activateTab(tabId: string): void {
+  if (activeTabId === tabId) return;
+  const nextTab = tabs.find((tab) => tab.id === tabId);
+  if (!nextTab) return;
+  syncFromActiveEditor();
+  activeTabId = nextTab.id;
+  state = nextTab;
+  editorController?.destroy();
+  editorController = null;
+  renderState();
+}
+
+async function closeTab(tabId = activeTabId): Promise<void> {
+  if (!tabId) return;
+  const tabIndex = tabs.findIndex((tab) => tab.id === tabId);
+  if (tabIndex < 0) return;
+  const tab = tabs[tabIndex];
+  const wasActive = tab.id === activeTabId;
+  const previousActiveId = activeTabId;
+  if (wasActive) syncFromActiveEditor();
+
+  if (tab.dirty) {
+    if (!wasActive) {
+      activeTabId = tab.id;
+      state = tab;
+      editorController?.destroy();
+      editorController = null;
+      renderState();
+    }
+    const choice = await askSaveChanges(tab.name);
+    if (choice === "save") {
+      if (!(await saveDocument())) return;
+    } else if (choice !== "discard") {
+      return;
+    }
+  }
+
+  tabs.splice(tabIndex, 1);
+  if (tabs.length === 0) {
+    activeTabId = null;
+    state = createDocument({ path: null, webHandle: null, name: "MD Reader", content: "" });
+  } else if (activeTabId === tab.id) {
+    const nextTab = tabs[Math.min(tabIndex, tabs.length - 1)];
+    activeTabId = nextTab.id;
+    state = nextTab;
+  } else if (!wasActive && previousActiveId) {
+    const previousTab = tabs.find((candidate) => candidate.id === previousActiveId);
+    if (previousTab) {
+      activeTabId = previousTab.id;
+      state = previousTab;
+    }
+  }
   editorController?.destroy();
   editorController = null;
   renderState();
@@ -512,7 +587,8 @@ async function setMode(mode: Mode): Promise<void> {
 function renderState(): void {
   documentName.textContent = state.name;
   dirtyIndicator.hidden = !state.dirty;
-  const hasDocument = Boolean(state.path || state.name !== "MD Reader");
+  renderTabs();
+  const hasDocument = activeTabId !== null;
   welcome.hidden = hasDocument;
   reader.hidden = !hasDocument || state.mode !== "read";
   editorToolbar.hidden = !hasDocument || state.mode !== "edit";
@@ -574,6 +650,7 @@ async function loadEditor(loadId: number): Promise<void> {
         state.markdown = markdown;
         state.dirty = state.markdown !== state.savedMarkdown;
         dirtyIndicator.hidden = !state.dirty;
+        updateTabMetadata(state);
         updateEmptyState();
       },
       onInvalidLink: () => showToast("Only http, https, mailto, tel, and Markdown links are allowed"),
@@ -588,6 +665,7 @@ function syncFromSource(): void {
   state.markdown = sourceEditor.value;
   state.dirty = state.markdown !== state.savedMarkdown;
   dirtyIndicator.hidden = !state.dirty;
+  updateTabMetadata(state);
   updateEmptyState();
 }
 
@@ -597,7 +675,7 @@ function syncFromActiveEditor(): void {
 }
 
 function updateEmptyState(): void {
-  const hasDocument = Boolean(state.path || state.name !== "MD Reader");
+  const hasDocument = activeTabId !== null;
   emptyState.hidden = !hasDocument || state.mode === "source" || Boolean(state.markdown.trim());
 }
 
@@ -613,6 +691,7 @@ async function saveDocument(): Promise<boolean> {
       state.savedMarkdown = state.markdown;
       state.dirty = false;
       dirtyIndicator.hidden = true;
+      updateTabMetadata(state);
       showToast(saved.handle ? "Saved" : "Downloaded .md");
       return true;
     } catch (error) {
@@ -626,6 +705,7 @@ async function saveDocument(): Promise<boolean> {
     state.savedMarkdown = state.markdown;
     state.dirty = false;
     dirtyIndicator.hidden = true;
+    updateTabMetadata(state);
     showToast("Saved");
     return true;
   } catch (error) {
@@ -646,6 +726,7 @@ async function saveAs(): Promise<boolean> {
       state.webHandle = saved.handle;
       state.savedMarkdown = state.markdown;
       state.dirty = false;
+      updateTabMetadata(state);
       renderState();
       showToast(saved.handle ? "Saved" : "Downloaded .md");
       return true;
@@ -667,6 +748,7 @@ async function saveAs(): Promise<boolean> {
     state.name = fileName(path);
     state.savedMarkdown = state.markdown;
     state.dirty = false;
+    updateTabMetadata(state);
     renderState();
     showToast("Saved");
     return true;
@@ -676,15 +758,9 @@ async function saveAs(): Promise<boolean> {
   }
 }
 
-async function confirmBeforeReplacing(): Promise<boolean> {
-  if (!state.dirty) return true;
-  const choice = await askSaveChanges();
-  if (choice === "save") return saveDocument();
-  return choice === "discard";
-}
-
-function askSaveChanges(): Promise<"save" | "discard" | "cancel"> {
+function askSaveChanges(name = "this document"): Promise<"save" | "discard" | "cancel"> {
   if (confirmDialog.open) confirmDialog.close("cancel");
+  getElement<HTMLParagraphElement>("confirm-message").textContent = `Your changes to “${name}” will be lost if you don't save them.`;
   confirmDialog.showModal();
   return new Promise((resolve) => {
     const finish = (): void => {
@@ -693,6 +769,71 @@ function askSaveChanges(): Promise<"save" | "discard" | "cancel"> {
     };
     confirmDialog.addEventListener("close", finish, { once: true });
   });
+}
+
+function renderTabs(): void {
+  tabBar.replaceChildren();
+  tabBar.hidden = tabs.length === 0;
+  if (tabs.length === 0) return;
+
+  for (const tab of tabs) {
+    const item = document.createElement("div");
+    item.className = "tab-item";
+    item.dataset.tabId = tab.id;
+    item.classList.toggle("active", tab.id === activeTabId);
+
+    const select = document.createElement("button");
+    select.type = "button";
+    select.className = "tab-select";
+    select.setAttribute("role", "tab");
+    select.setAttribute("aria-selected", String(tab.id === activeTabId));
+    select.title = tab.path ?? tab.name;
+    select.addEventListener("click", () => activateTab(tab.id));
+
+    const name = document.createElement("span");
+    name.className = "tab-name";
+    name.textContent = tab.name;
+    select.append(name);
+
+    const dirty = document.createElement("span");
+    dirty.className = "tab-dirty";
+    dirty.textContent = "●";
+    dirty.hidden = !tab.dirty;
+    dirty.setAttribute("aria-label", "Unsaved changes");
+    select.append(dirty);
+
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "tab-close";
+    close.setAttribute("aria-label", `Close ${tab.name}`);
+    close.title = "Close tab (⌘W)";
+    close.textContent = "×";
+    close.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void closeTab(tab.id);
+    });
+
+    item.append(select, close);
+    tabBar.append(item);
+  }
+
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "tab-add";
+  add.setAttribute("aria-label", "New Markdown file");
+  add.title = "New Markdown file (⌘N)";
+  add.textContent = "+";
+  add.addEventListener("click", () => void newDocument());
+  tabBar.append(add);
+}
+
+function updateTabMetadata(tab: DocumentState): void {
+  const item = tabBar.querySelector<HTMLElement>(`[data-tab-id="${tab.id}"]`);
+  if (!item) return;
+  const dirty = item.querySelector<HTMLElement>(".tab-dirty");
+  if (dirty) dirty.hidden = !tab.dirty;
+  const name = item.querySelector<HTMLElement>(".tab-name");
+  if (name) name.textContent = tab.name;
 }
 
 function openMenu(): void {

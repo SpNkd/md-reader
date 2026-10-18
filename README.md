@@ -1,6 +1,6 @@
 # MD Reader
 
-MD Reader is a small, focused Markdown reader and visual editor. The same Vanilla TypeScript frontend runs as a Tauri desktop app and a static browser app.
+MD Reader is a small, focused Markdown reader and visual editor. The same Vanilla TypeScript frontend runs as a Tauri desktop app and a static browser app. Desktop tabs let you keep several Markdown documents open in one window.
 
 <p align="center"><i>Screenshot placeholder — a polished product screenshot can be added here.</i></p>
 
@@ -52,7 +52,7 @@ Download the x64 NSIS `.exe` from Releases and run it. Unsigned development rele
 
 Choose the `.dmg` matching your Mac: `aarch64` for Apple Silicon or `x86_64` for Intel. Open it and drag `MD Reader.app` to Applications. The DMG is intentionally small because Tauri uses the system WebKit; the app bundle is larger once mounted.
 
-The public `v0.2.1` build uses an ad-hoc signature and is not notarized. If macOS blocks it after downloading it from GitHub, remove the download quarantine after copying it to Applications, then launch it:
+The public `v0.3.0` build uses an ad-hoc signature and is not notarized. If macOS blocks it after downloading it from GitHub, remove the download quarantine after copying it to Applications, then launch it:
 
 ```bash
 xattr -dr com.apple.quarantine "/Applications/MD Reader.app"
