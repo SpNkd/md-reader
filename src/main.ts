@@ -64,6 +64,9 @@ let editorController: EditorController | null = null;
 let editorLoadId = 0;
 let menuOpen = false;
 let quitting = false;
+let findOpen = false;
+let findQuery = "";
+let findMatchIndex = 0;
 let unlistenOpenFile: UnlistenFn | undefined;
 let unlistenNativeMenu: UnlistenFn | undefined;
 let unlistenExitRequested: UnlistenFn | undefined;
@@ -106,6 +109,7 @@ app.innerHTML = `
         <div id="menu" class="menu" hidden>
           <button id="menu-new" type="button">New Markdown File <span>⌘N</span></button>
           <button id="menu-open" type="button">Open Markdown <span>⌘O</span></button>
+          <button id="menu-find" type="button">Find <span>⌘F</span></button>
           <button id="menu-save" type="button">Save <span>⌘S</span></button>
           <button id="menu-save-as" type="button">Save As… <span>⇧⌘S</span></button>
           <div class="menu-divider"></div>
@@ -124,6 +128,13 @@ app.innerHTML = `
       </nav>
     </header>
     <div id="tab-bar" class="tab-bar" role="tablist" aria-label="Open documents" hidden></div>
+    <div id="find-bar" class="find-bar" hidden role="search" aria-label="Find in document">
+      <input id="find-input" class="find-input" type="search" placeholder="Find in document…" aria-label="Find in document" autocomplete="off" spellcheck="false" />
+      <span id="find-count" class="find-count" aria-live="polite"></span>
+      <button id="find-previous" class="find-button" type="button" aria-label="Previous match" title="Previous match (⇧↩)">↑</button>
+      <button id="find-next" class="find-button" type="button" aria-label="Next match" title="Next match (↩)">↓</button>
+      <button id="find-close" class="find-button find-close" type="button" aria-label="Close find" title="Close (Esc)">×</button>
+    </div>
     <section id="workspace" class="workspace">
       <section id="welcome" class="welcome" aria-label="Welcome">
         <div class="welcome-card">
@@ -202,7 +213,7 @@ app.innerHTML = `
       <div class="about-content">
         <div class="about-mark">.md</div>
         <h2>MD Reader</h2>
-        <p class="about-version">Version 0.3.1</p>
+        <p class="about-version">Version 0.3.2</p>
         <p>A focused, local Markdown reader and visual editor.</p>
         <p class="about-note">Your Markdown files stay on this computer. MD Reader does not upload or send them anywhere.</p>
         <a href="#" data-external-url="https://github.com/SpNkd/md-reader">View project on GitHub ↗</a>
@@ -221,6 +232,9 @@ const welcome = getElement<HTMLElement>("welcome");
 const emptyState = getElement<HTMLElement>("empty-state");
 const menu = getElement<HTMLDivElement>("menu");
 const menuButton = getElement<HTMLButtonElement>("menu-button");
+const findBar = getElement<HTMLDivElement>("find-bar");
+const findInput = getElement<HTMLInputElement>("find-input");
+const findCount = getElement<HTMLSpanElement>("find-count");
 const toast = getElement<HTMLDivElement>("toast");
 const confirmDialog = getElement<HTMLDialogElement>("confirm-dialog");
 const tableDialog = getElement<HTMLDialogElement>("table-dialog");
@@ -249,6 +263,7 @@ async function bootstrap(): Promise<void> {
       unlistenNativeMenu = await listen<string>("native-menu", (event) => {
         if (event.payload === "new") void newDocument();
         else if (event.payload === "open") void chooseAndOpen();
+        else if (event.payload === "find") openFind();
         else if (event.payload === "save") void saveDocument();
         else if (event.payload === "save-as") void saveAs();
         else if (event.payload === "quit") void requestQuit();
@@ -277,6 +292,7 @@ function wireEvents(): void {
   getElement<HTMLButtonElement>("welcome-demo").addEventListener("click", () => void openDemo());
   getElement<HTMLButtonElement>("menu-new").addEventListener("click", () => void newDocument());
   getElement<HTMLButtonElement>("menu-open").addEventListener("click", () => void chooseAndOpen());
+  getElement<HTMLButtonElement>("menu-find").addEventListener("click", () => openFind());
   getElement<HTMLButtonElement>("menu-save").addEventListener("click", () => void saveDocument());
   getElement<HTMLButtonElement>("menu-save-as").addEventListener("click", () => void saveAs());
   getElement<HTMLButtonElement>("read-button").addEventListener("click", () => void setMode("read"));
@@ -293,6 +309,23 @@ function wireEvents(): void {
     closeMenu();
     aboutDialog.showModal();
   });
+  findInput.addEventListener("input", () => {
+    findQuery = findInput.value;
+    findMatchIndex = 0;
+    refreshFindResults();
+  });
+  findInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      moveFindMatch(event.shiftKey ? -1 : 1);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      closeFind();
+    }
+  });
+  getElement<HTMLButtonElement>("find-previous").addEventListener("click", () => moveFindMatch(-1));
+  getElement<HTMLButtonElement>("find-next").addEventListener("click", () => moveFindMatch(1));
+  getElement<HTMLButtonElement>("find-close").addEventListener("click", closeFind);
 
   document.querySelectorAll<HTMLButtonElement>("[data-theme]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -319,10 +352,18 @@ function wireEvents(): void {
   });
 
   document.addEventListener("keydown", (event) => {
+    if (findOpen && event.key === "Escape") {
+      event.preventDefault();
+      closeFind();
+      return;
+    }
     const modifier = event.metaKey || event.ctrlKey;
     if (!modifier) return;
     const key = event.key.toLowerCase();
-    if (key === "o") {
+    if (key === "f") {
+      event.preventDefault();
+      openFind();
+    } else if (key === "o") {
       event.preventDefault();
       void chooseAndOpen();
     } else if (key === "n") {
@@ -515,6 +556,7 @@ function addDocument(document: DocumentInput): void {
   tabs.push(tab);
   activeTabId = tab.id;
   state = tab;
+  findMatchIndex = 0;
   editorController?.destroy();
   editorController = null;
   renderState();
@@ -527,6 +569,7 @@ function activateTab(tabId: string): void {
   syncFromActiveEditor();
   activeTabId = nextTab.id;
   state = nextTab;
+  findMatchIndex = 0;
   editorController?.destroy();
   editorController = null;
   renderState();
@@ -601,6 +644,7 @@ function renderState(): void {
   getElement<HTMLButtonElement>("source-button").classList.toggle("active", state.mode === "source");
 
   if (!hasDocument) {
+    if (findOpen) closeFind();
     editorLoadId += 1;
     editorController?.destroy();
     editorController = null;
@@ -630,6 +674,7 @@ function renderState(): void {
     }, 0);
   }
   updateMenuChecks();
+  if (findOpen) window.setTimeout(refreshFindResults, 0);
 }
 
 async function loadEditor(loadId: number): Promise<void> {
@@ -656,6 +701,7 @@ async function loadEditor(loadId: number): Promise<void> {
       onInvalidLink: () => showToast("Only http, https, mailto, tel, and Markdown links are allowed"),
     });
     editorController.focus();
+    if (findOpen) refreshFindResults();
   } catch (error) {
     if (loadId === editorLoadId && state.mode === "edit") showToast(`Could not load editor: ${errorMessage(error)}`);
   }
@@ -834,6 +880,134 @@ function updateTabMetadata(tab: DocumentState): void {
   if (dirty) dirty.hidden = !tab.dirty;
   const name = item.querySelector<HTMLElement>(".tab-name");
   if (name) name.textContent = tab.name;
+}
+
+function openFind(): void {
+  if (activeTabId === null) {
+    showToast("Open a document first");
+    return;
+  }
+  closeMenu();
+  findOpen = true;
+  findBar.hidden = false;
+  findInput.value = findQuery;
+  findInput.focus();
+  findInput.select();
+  refreshFindResults();
+}
+
+function closeFind(): void {
+  findOpen = false;
+  findBar.hidden = true;
+  findCount.textContent = "";
+  clearFindHighlights(reader);
+  clearFindHighlights(editorHost);
+}
+
+function moveFindMatch(direction: number): void {
+  if (!findOpen || findQuery.length === 0) return;
+  findMatchIndex += direction;
+  refreshFindResults();
+}
+
+function refreshFindResults(): void {
+  clearFindHighlights(reader);
+  clearFindHighlights(editorHost);
+
+  const query = findQuery;
+  if (!findOpen || activeTabId === null || query.length === 0) {
+    findCount.textContent = "";
+    return;
+  }
+
+  if (state.mode === "source") {
+    const matches = findTextMatches(state.markdown, query);
+    if (matches.length === 0) {
+      findCount.textContent = "No matches";
+      return;
+    }
+    findMatchIndex = normalizeFindIndex(findMatchIndex, matches.length);
+    const match = matches[findMatchIndex];
+    sourceEditor.setSelectionRange(match.start, match.end);
+    if (document.activeElement !== findInput) sourceEditor.focus({ preventScroll: true });
+    findCount.textContent = `${findMatchIndex + 1} of ${matches.length}`;
+    return;
+  }
+
+  const target = state.mode === "read" ? reader : editorHost;
+  const matches = highlightFindMatches(target, query);
+  if (matches.length === 0) {
+    findCount.textContent = "No matches";
+    return;
+  }
+  findMatchIndex = normalizeFindIndex(findMatchIndex, matches.length);
+  matches[findMatchIndex].classList.add("find-current");
+  matches[findMatchIndex].scrollIntoView({ block: "center", inline: "nearest" });
+  findCount.textContent = `${findMatchIndex + 1} of ${matches.length}`;
+}
+
+function findTextMatches(text: string, query: string): Array<{ start: number; end: number }> {
+  const matches: Array<{ start: number; end: number }> = [];
+  const haystack = text.toLocaleLowerCase();
+  const needle = query.toLocaleLowerCase();
+  if (needle.length === 0) return matches;
+  let start = 0;
+  while (start < haystack.length) {
+    const matchStart = haystack.indexOf(needle, start);
+    if (matchStart < 0) break;
+    matches.push({ start: matchStart, end: matchStart + query.length });
+    start = matchStart + Math.max(needle.length, 1);
+  }
+  return matches;
+}
+
+function highlightFindMatches(target: HTMLElement, query: string): HTMLElement[] {
+  const textNodes: Text[] = [];
+  const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    const textNode = node as Text;
+    const parent = textNode.parentElement;
+    if (parent && !parent.closest("script, style, mark.find-hit")) textNodes.push(textNode);
+    node = walker.nextNode();
+  }
+
+  const needle = query.toLocaleLowerCase();
+  const marks: HTMLElement[] = [];
+  for (const textNode of textNodes) {
+    const text = textNode.textContent ?? "";
+    const haystack = text.toLocaleLowerCase();
+    const positions: number[] = [];
+    let start = 0;
+    while (start < haystack.length) {
+      const matchStart = haystack.indexOf(needle, start);
+      if (matchStart < 0) break;
+      positions.push(matchStart);
+      start = matchStart + Math.max(needle.length, 1);
+    }
+    for (const matchStart of positions.reverse()) {
+      const range = document.createRange();
+      range.setStart(textNode, matchStart);
+      range.setEnd(textNode, matchStart + query.length);
+      const mark = document.createElement("mark");
+      mark.className = "find-hit";
+      range.surroundContents(mark);
+      marks.push(mark);
+    }
+  }
+  marks.sort((left, right) => left.compareDocumentPosition(right) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+  return marks;
+}
+
+function clearFindHighlights(target: HTMLElement): void {
+  target.querySelectorAll("mark.find-hit").forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent ?? ""));
+  });
+  target.normalize();
+}
+
+function normalizeFindIndex(index: number, count: number): number {
+  return ((index % count) + count) % count;
 }
 
 function openMenu(): void {

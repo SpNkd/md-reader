@@ -72,6 +72,15 @@ button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible { 
 .tab-dirty { color: #e08b35; font-size: 10px; line-height: 1; }
 .tab-close { width: 25px; margin: 4px 3px 4px 0; border-radius: 5px; font-size: 17px; line-height: 1; }
 .tab-add { flex: 0 0 29px; align-self: center; height: 28px; margin-left: 3px; border-radius: 6px; font-size: 20px; line-height: 1; }
+.find-bar { min-height: 45px; display: flex; align-items: center; gap: 6px; padding: 5px 14px; border-bottom: 1px solid var(--border); background: var(--surface); box-shadow: 0 3px 10px rgba(0,0,0,.06); }
+.find-input { width: min(320px, 45vw); height: 32px; border: 1px solid var(--border); border-radius: 7px; padding: 0 10px; color: var(--text); background: var(--background); font-size: 13px; }
+.find-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.find-count { min-width: 72px; color: var(--text-muted); font-size: 11px; }
+.find-button { width: 29px; height: 29px; border: 0; border-radius: 6px; color: var(--text-muted); background: transparent; cursor: pointer; font-size: 16px; line-height: 1; }
+.find-button:hover { color: var(--text); background: var(--surface-muted); }
+.find-close { margin-left: 2px; font-size: 20px; }
+.find-hit { padding: .08em .08em; border-radius: 3px; color: inherit; background: color-mix(in srgb, #f4c84e 65%, transparent); }
+.find-hit.find-current { background: color-mix(in srgb, var(--accent) 48%, #f4c84e); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent); }
 
 .workspace { position: relative; flex: 1; overflow: auto; }
 .content { width: min(100% - 44px, 830px); margin: 0 auto; padding: 58px 0 100px; transform: scale(var(--zoom)); transform-origin: top center; }
@@ -177,6 +186,8 @@ button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible { 
 @media (max-width: 640px) {
   .topbar { padding-inline: 12px; }
   .tab-bar { padding-inline: 8px; }
+  .find-bar { padding-inline: 8px; }
+  .find-input { width: min(260px, 60vw); }
   .content { width: min(100% - 28px, 830px); padding-top: 34px; }
   .editor-toolbar { width: calc(100% - 28px); overflow-x: auto; }
   .editor-host { width: calc(100% - 28px); }

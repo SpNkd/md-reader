@@ -101,6 +101,9 @@ fn main() {
             let open = MenuItemBuilder::with_id("file-open", "Open…")
                 .accelerator("CmdOrCtrl+O")
                 .build(app)?;
+            let find = MenuItemBuilder::with_id("edit-find", "Find")
+                .accelerator("CmdOrCtrl+F")
+                .build(app)?;
             let save = MenuItemBuilder::with_id("file-save", "Save")
                 .accelerator("CmdOrCtrl+S")
                 .build(app)?;
@@ -126,6 +129,7 @@ fn main() {
                 .build(app)?;
             let menu = Menu::default(app.handle())?;
             let mut has_file_menu = false;
+            let mut has_edit_menu = false;
             let mut has_view_menu = false;
             let mut has_help_menu = false;
             for item in menu.items()? {
@@ -140,6 +144,10 @@ fn main() {
                         submenu.append(&save)?;
                         submenu.append(&save_as)?;
                         submenu.append(&quit)?;
+                    }
+                    "Edit" => {
+                        has_edit_menu = true;
+                        submenu.append(&find)?;
                     }
                     "View" => {
                         has_view_menu = true;
@@ -166,6 +174,12 @@ fn main() {
                     .build()?;
                 menu.append(&file_menu)?;
             }
+            if !has_edit_menu {
+                let edit_menu = SubmenuBuilder::with_id(app, "edit-menu", "Edit")
+                    .item(&find)
+                    .build()?;
+                menu.append(&edit_menu)?;
+            }
             if !has_view_menu {
                 let view_menu = SubmenuBuilder::with_id(app, "view-menu", "View")
                     .item(&toggle_mode)
@@ -191,6 +205,7 @@ fn main() {
                     "file-save" => Some("save"),
                     "file-save-as" => Some("save-as"),
                     "file-quit" => Some("quit"),
+                    "edit-find" => Some("find"),
                     "view-toggle-mode" => Some("toggle-mode"),
                     "view-zoom-in" => Some("zoom-in"),
                     "view-zoom-out" => Some("zoom-out"),
