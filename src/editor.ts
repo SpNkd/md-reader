@@ -79,8 +79,7 @@ export function mountEditor(options: EditorOptions): EditorController {
       options.emojiDialog.showModal();
       return;
     } else if (command === "insertTaskList") {
-      const selectedText = window.getSelection()?.toString().trim() || "Task item";
-      document.execCommand("insertHTML", false, `<ul><li class="task-item"><input type="checkbox" data-task-checkbox aria-label="Toggle task"> <span class="task-label">${escapeHtml(selectedText)}</span></li></ul><p><br></p>`);
+      insertTaskList();
     } else if (command === "blockquote") {
       document.execCommand("formatBlock", false, "blockquote");
     } else if (command === "formatBlock") {
@@ -129,8 +128,12 @@ export function mountEditor(options: EditorOptions): EditorController {
   options.emojiDialog.addEventListener("close", emojiCloseHandler);
 
   surface.addEventListener("input", sync);
-  surface.addEventListener("keyup", updateToolbarState);
-  surface.addEventListener("mouseup", updateToolbarState);
+  const selectionHandler = (): void => {
+    rememberSelection();
+    updateToolbarState();
+  };
+  surface.addEventListener("keyup", selectionHandler);
+  surface.addEventListener("mouseup", selectionHandler);
   surface.addEventListener("blur", rememberSelection);
   updateToolbarState();
 
@@ -142,6 +145,8 @@ export function mountEditor(options: EditorOptions): EditorController {
       options.tableDialog.removeEventListener("close", tableCloseHandler);
       options.emojiDialog.removeEventListener("close", emojiCloseHandler);
       options.formatSelect.removeEventListener("change", formatHandler);
+      surface.removeEventListener("keyup", selectionHandler);
+      surface.removeEventListener("mouseup", selectionHandler);
       buttonHandlers.forEach(({ button, preventFocusLoss, execute }) => {
         button.removeEventListener("mousedown", preventFocusLoss);
         button.removeEventListener("click", execute);
@@ -149,6 +154,109 @@ export function mountEditor(options: EditorOptions): EditorController {
       surface.remove();
     },
   };
+
+  function insertTaskList(): void {
+    const selection = window.getSelection();
+    const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+    const selectedText = selection?.toString().trim() ?? "";
+
+    if (range && !range.collapsed && selectedText) {
+      const startBlock = findEditableBlock(range.startContainer, surface!);
+      const endBlock = findEditableBlock(range.endContainer, surface!);
+      if (startBlock && startBlock === endBlock && startBlock.tagName.toLowerCase() !== "li") {
+        const selectedContent = range.cloneContents();
+        const taskList = createTaskListElement(selectedContent);
+        const blockText = startBlock.textContent?.trim() ?? "";
+        if (selectedText === blockText) {
+          startBlock.replaceWith(taskList);
+        } else {
+          const beforeRange = document.createRange();
+          beforeRange.setStart(startBlock, 0);
+          beforeRange.setEnd(range.startContainer, range.startOffset);
+          const afterRange = document.createRange();
+          afterRange.setStart(range.endContainer, range.endOffset);
+          afterRange.setEnd(startBlock, startBlock.childNodes.length);
+
+          const replacement = document.createDocumentFragment();
+          const before = cloneBlockWithContent(startBlock, beforeRange.cloneContents());
+          const after = cloneBlockWithContent(startBlock, afterRange.cloneContents());
+          if (before?.textContent?.trim()) replacement.append(before);
+          replacement.append(taskList);
+          if (after?.textContent?.trim()) replacement.append(after);
+          startBlock.replaceWith(replacement);
+        }
+        placeCaretAtEnd(taskList.querySelector<HTMLElement>(".task-label") ?? taskList);
+        return;
+      }
+
+      document.execCommand("insertHTML", false, `${taskListHtml(escapeHtml(selectedText))}<p><br></p>`);
+      return;
+    }
+
+    const block = selection?.anchorNode ? findEditableBlock(selection.anchorNode, surface!) : null;
+    const blockText = block?.textContent?.trim() ?? "";
+    if (block && block !== surface && blockText && block.tagName.toLowerCase() !== "li") {
+      const list = document.createElement("ul");
+      list.innerHTML = taskListHtml(block.innerHTML);
+      const spacer = document.createElement("p");
+      spacer.innerHTML = "<br>";
+      block.replaceWith(list);
+      list.after(spacer);
+      placeCaretAtEnd(list.querySelector<HTMLElement>(".task-label") ?? list);
+      return;
+    }
+
+    document.execCommand("insertHTML", false, `${taskListHtml("Task item")}<p><br></p>`);
+  }
+}
+
+function taskListHtml(content: string): string {
+  return `<ul><li class="task-item"><input type="checkbox" data-task-checkbox aria-label="Toggle task"> <span class="task-label">${content}</span></li></ul>`;
+}
+
+function createTaskListElement(content: DocumentFragment): HTMLUListElement {
+  const list = document.createElement("ul");
+  const item = document.createElement("li");
+  item.className = "task-item";
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.dataset.taskCheckbox = "";
+  checkbox.setAttribute("aria-label", "Toggle task");
+  const label = document.createElement("span");
+  label.className = "task-label";
+  label.append(content);
+  item.append(checkbox, document.createTextNode(" "), label);
+  list.append(item);
+  return list;
+}
+
+function cloneBlockWithContent(block: HTMLElement, content: DocumentFragment): HTMLElement | null {
+  if (content.textContent?.trim()) {
+    const clone = block.cloneNode(false) as HTMLElement;
+    clone.append(content);
+    return clone;
+  }
+  return null;
+}
+
+function findEditableBlock(node: Node, root: HTMLElement): HTMLElement | null {
+  let current = node instanceof HTMLElement ? node : node.parentElement;
+  while (current && current !== root) {
+    if (/^(P|H[1-6]|LI|BLOCKQUOTE|PRE)$/.test(current.tagName)) return current;
+    current = current.parentElement;
+  }
+  return null;
+}
+
+function placeCaretAtEnd(element: HTMLElement): void {
+  element.parentElement?.focus();
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
 }
 
 function parseTableDimension(input: string, minimum: number, maximum: number): number | null {

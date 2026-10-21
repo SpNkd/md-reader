@@ -101,6 +101,7 @@ button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible { 
 .reader-content ul, .reader-content ol, .editor-surface ul, .editor-surface ol { margin: .4em 0 1.1em; padding-left: 1.45em; }
 .reader-content li, .editor-surface li { padding-left: .25em; margin: .22em 0; }
 .reader-content li::marker, .editor-surface li::marker { color: var(--text-muted); }
+.reader-content li.task-item, .editor-surface li.task-item { list-style: none; padding-left: 0; }
 .reader-content input[type="checkbox"], .editor-surface input[type="checkbox"] { accent-color: var(--accent); margin: 0 .5em .15em 0; vertical-align: middle; }
 .reader-content input[data-task-checkbox], .editor-surface input[data-task-checkbox] { cursor: pointer; }
 .task-label { transition: color .15s ease, opacity .15s ease; }
