@@ -167,7 +167,9 @@ app.innerHTML = `
         <span class="toolbar-divider" aria-hidden="true"></span>
         <button class="format-button" data-command="insertUnorderedList" type="button" aria-label="Bullet list" title="Bullet list">•≡</button>
         <button class="format-button" data-command="insertOrderedList" type="button" aria-label="Numbered list" title="Numbered list">1≡</button>
+        <button class="format-button" data-command="insertTaskList" type="button" aria-label="Checklist" title="Checklist">☑</button>
         <button class="format-button" data-command="blockquote" type="button" aria-label="Quote" title="Quote">❝</button>
+        <button class="format-button" data-command="insertEmoji" type="button" aria-label="Insert emoji" title="Insert emoji">😀</button>
         <button class="format-button" data-command="createTable" type="button" aria-label="Insert table" title="Insert table">▦</button>
         <button class="format-button" data-command="createLink" type="button" aria-label="Insert link" title="Insert link">↗</button>
         <span class="toolbar-divider" aria-hidden="true"></span>
@@ -209,11 +211,42 @@ app.innerHTML = `
         </div>
       </form>
     </dialog>
+    <dialog id="emoji-dialog" class="emoji-dialog">
+      <form method="dialog">
+        <h2>Insert emoji</h2>
+        <p>Choose an emoji to insert at the cursor.</p>
+        <div class="emoji-grid" role="listbox" aria-label="Emoji picker">
+          <button value="😀" class="emoji-option" type="submit" aria-label="Grinning face">😀</button>
+          <button value="😃" class="emoji-option" type="submit" aria-label="Smiling face">😃</button>
+          <button value="😂" class="emoji-option" type="submit" aria-label="Face with tears of joy">😂</button>
+          <button value="😍" class="emoji-option" type="submit" aria-label="Heart eyes">😍</button>
+          <button value="🤔" class="emoji-option" type="submit" aria-label="Thinking face">🤔</button>
+          <button value="😊" class="emoji-option" type="submit" aria-label="Smiling face with blush">😊</button>
+          <button value="👍" class="emoji-option" type="submit" aria-label="Thumbs up">👍</button>
+          <button value="👏" class="emoji-option" type="submit" aria-label="Clapping hands">👏</button>
+          <button value="🙏" class="emoji-option" type="submit" aria-label="Folded hands">🙏</button>
+          <button value="🎉" class="emoji-option" type="submit" aria-label="Party popper">🎉</button>
+          <button value="🔥" class="emoji-option" type="submit" aria-label="Fire">🔥</button>
+          <button value="✨" class="emoji-option" type="submit" aria-label="Sparkles">✨</button>
+          <button value="🚀" class="emoji-option" type="submit" aria-label="Rocket">🚀</button>
+          <button value="💡" class="emoji-option" type="submit" aria-label="Light bulb">💡</button>
+          <button value="📌" class="emoji-option" type="submit" aria-label="Pushpin">📌</button>
+          <button value="✅" class="emoji-option" type="submit" aria-label="Check mark">✅</button>
+          <button value="⚠️" class="emoji-option" type="submit" aria-label="Warning">⚠️</button>
+          <button value="❤️" class="emoji-option" type="submit" aria-label="Red heart">❤️</button>
+          <button value="😎" class="emoji-option" type="submit" aria-label="Cool face">😎</button>
+          <button value="🐛" class="emoji-option" type="submit" aria-label="Bug">🐛</button>
+        </div>
+        <div class="dialog-actions">
+          <button value="cancel" type="submit">Cancel</button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="about-dialog" class="about-dialog">
       <div class="about-content">
         <div class="about-mark">.md</div>
         <h2>MD Reader</h2>
-        <p class="about-version">Version 0.3.2</p>
+        <p class="about-version">Version 0.3.3</p>
         <p>A focused, local Markdown reader and visual editor.</p>
         <p class="about-note">Your Markdown files stay on this computer. MD Reader does not upload or send them anywhere.</p>
         <a href="#" data-external-url="https://github.com/SpNkd/md-reader">View project on GitHub ↗</a>
@@ -240,6 +273,7 @@ const confirmDialog = getElement<HTMLDialogElement>("confirm-dialog");
 const tableDialog = getElement<HTMLDialogElement>("table-dialog");
 const tableRowsInput = getElement<HTMLInputElement>("table-rows");
 const tableColumnsInput = getElement<HTMLInputElement>("table-columns");
+const emojiDialog = getElement<HTMLDialogElement>("emoji-dialog");
 const aboutDialog = getElement<HTMLDialogElement>("about-dialog");
 const editorToolbar = getElement<HTMLDivElement>("editor-toolbar");
 const formatSelect = getElement<HTMLSelectElement>("format-select");
@@ -299,6 +333,8 @@ function wireEvents(): void {
   getElement<HTMLButtonElement>("edit-button").addEventListener("click", () => void setMode("edit"));
   getElement<HTMLButtonElement>("source-button").addEventListener("click", () => void setMode("source"));
   sourceEditor.addEventListener("input", syncFromSource);
+  reader.addEventListener("change", handleTaskCheckboxChange);
+  editorHost.addEventListener("change", handleTaskCheckboxChange);
   getElement<HTMLButtonElement>("menu-wrap").addEventListener("click", () => {
     preferences.wordWrap = !preferences.wordWrap;
     savePreferences();
@@ -688,6 +724,7 @@ async function loadEditor(loadId: number): Promise<void> {
       tableDialog,
       tableRowsInput,
       tableColumnsInput,
+      emojiDialog,
       markdown: state.markdown,
       documentPath: state.path,
       renderMarkdown,
@@ -713,6 +750,41 @@ function syncFromSource(): void {
   dirtyIndicator.hidden = !state.dirty;
   updateTabMetadata(state);
   updateEmptyState();
+}
+
+function handleTaskCheckboxChange(event: Event): void {
+  const input = event.target;
+  if (!(input instanceof HTMLInputElement) || input.type !== "checkbox" || !input.matches("[data-task-checkbox]")) return;
+  const item = input.closest<HTMLElement>(".task-item");
+  item?.classList.toggle("is-complete", input.checked);
+
+  if (state.mode === "read") {
+    const checkboxes = Array.from(reader.querySelectorAll<HTMLInputElement>("input[data-task-checkbox]"));
+    const taskIndex = checkboxes.indexOf(input);
+    if (taskIndex < 0) return;
+    const markdown = toggleTaskInMarkdown(state.markdown, taskIndex, input.checked);
+    if (markdown !== state.markdown) {
+      state.markdown = markdown;
+      state.dirty = state.markdown !== state.savedMarkdown;
+      dirtyIndicator.hidden = !state.dirty;
+      updateTabMetadata(state);
+      updateEmptyState();
+    }
+  } else if (state.mode === "edit") {
+    editorController?.sync();
+  }
+}
+
+function toggleTaskInMarkdown(markdown: string, taskIndex: number, checked: boolean): string {
+  const taskPattern = /^(\s*(?:[-+*]|\d+[.)])\s+\[)[ xX](\]\s+)/;
+  let currentIndex = 0;
+  return markdown.split("\n").map((line) => {
+    const match = line.match(taskPattern);
+    if (!match) return line;
+    const lineIndex = currentIndex++;
+    if (lineIndex !== taskIndex) return line;
+    return `${match[1]}${checked ? "x" : " "}${match[2]}${line.slice(match[0].length)}`;
+  }).join("\n");
 }
 
 function syncFromActiveEditor(): void {
@@ -1262,8 +1334,10 @@ function readList(lines: string[], start: number, baseDir: string): { html: stri
     while (cursor < items.length && items[cursor].indent === indent) {
       const item = items[cursor];
       const task = item.text.match(/^\[[ xX]\]\s+(.+)$/);
-      const body = task ? `<input type="checkbox" disabled ${item.checked ? "checked" : ""}> ${inlineMarkdown(task[1], baseDir)}` : inlineMarkdown(item.text, baseDir);
-      result.push(`<li${task ? " class=\"task-item\"" : ""}>${body}`);
+      const body = task
+        ? `<input type="checkbox" data-task-checkbox aria-label="Toggle task" ${item.checked ? "checked" : ""}> <span class="task-label">${inlineMarkdown(task[1], baseDir)}</span>`
+        : inlineMarkdown(item.text, baseDir);
+      result.push(`<li${task ? ` class="task-item${item.checked ? " is-complete" : ""}"` : ""}>${body}`);
       cursor += 1;
       if (cursor < items.length && items[cursor].indent > indent) {
         const nested = renderLevel(cursor, items[cursor].indent);

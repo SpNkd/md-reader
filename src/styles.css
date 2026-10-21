@@ -102,6 +102,9 @@ button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible { 
 .reader-content li, .editor-surface li { padding-left: .25em; margin: .22em 0; }
 .reader-content li::marker, .editor-surface li::marker { color: var(--text-muted); }
 .reader-content input[type="checkbox"], .editor-surface input[type="checkbox"] { accent-color: var(--accent); margin: 0 .5em .15em 0; vertical-align: middle; }
+.reader-content input[data-task-checkbox], .editor-surface input[data-task-checkbox] { cursor: pointer; }
+.task-label { transition: color .15s ease, opacity .15s ease; }
+.task-item.is-complete .task-label { color: var(--text-muted); text-decoration: line-through; text-decoration-thickness: 1.5px; text-decoration-color: color-mix(in srgb, var(--text-muted) 78%, transparent); }
 .reader-content hr, .editor-surface hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
 .reader-content img, .editor-surface img { display: block; max-width: 100%; height: auto; margin: 1.2em auto; border-radius: 8px; }
 .missing-image { display: inline-flex; align-items: center; gap: .35em; max-width: 100%; padding: .45em .65em; border: 1px dashed var(--border); border-radius: 7px; color: var(--text-muted); background: var(--surface-muted); font-size: .88em; overflow-wrap: anywhere; }
@@ -171,6 +174,16 @@ button:focus-visible, a:focus-visible, [contenteditable="true"]:focus-visible { 
 .table-field input { width: 100%; border: 1px solid var(--border); border-radius: 7px; padding: 8px 9px; color: var(--text); background: var(--background); font: inherit; }
 .table-field input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .table-dialog .dialog-actions { margin-top: 22px; }
+
+.emoji-dialog { width: min(390px, calc(100% - 36px)); padding: 0; border: 1px solid var(--border); border-radius: 12px; color: var(--text); background: var(--surface); box-shadow: 0 20px 60px rgba(0,0,0,.28); }
+.emoji-dialog::backdrop { background: rgba(0,0,0,.32); }
+.emoji-dialog form { padding: 23px; }
+.emoji-dialog h2 { margin: 0 0 8px; font-size: 17px; }
+.emoji-dialog p { margin: 0 0 17px; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+.emoji-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; }
+.emoji-option { display: grid; place-items: center; min-width: 0; aspect-ratio: 1; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--background); cursor: pointer; font-size: 23px; line-height: 1; }
+.emoji-option:hover, .emoji-option:focus-visible { border-color: var(--accent); background: var(--surface-muted); transform: translateY(-1px); }
+.emoji-dialog .dialog-actions { margin-top: 21px; }
 
 .about-dialog { width: min(360px, calc(100% - 36px)); padding: 0; border: 1px solid var(--border); border-radius: 14px; color: var(--text); background: var(--surface); box-shadow: 0 20px 60px rgba(0,0,0,.28); }
 .about-dialog::backdrop { background: rgba(0,0,0,.32); }

@@ -52,7 +52,7 @@ Download the x64 NSIS `.exe` from Releases and run it. Unsigned development rele
 
 Choose the `.dmg` matching your Mac: `aarch64` for Apple Silicon or `x86_64` for Intel. Open it and drag `MD Reader.app` to Applications. The DMG is intentionally small because Tauri uses the system WebKit; the app bundle is larger once mounted.
 
-The public `v0.3.2` build uses an ad-hoc signature and is not notarized. If macOS blocks it after downloading it from GitHub, remove the download quarantine after copying it to Applications, then launch it:
+The public `v0.3.3` build uses an ad-hoc signature and is not notarized. If macOS blocks it after downloading it from GitHub, remove the download quarantine after copying it to Applications, then launch it:
 
 ```bash
 xattr -dr com.apple.quarantine "/Applications/MD Reader.app"

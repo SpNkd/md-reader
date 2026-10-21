@@ -12,6 +12,7 @@ interface EditorOptions {
   tableDialog: HTMLDialogElement;
   tableRowsInput: HTMLInputElement;
   tableColumnsInput: HTMLInputElement;
+  emojiDialog: HTMLDialogElement;
   markdown: string;
   documentPath: string | null;
   renderMarkdown(markdown: string, documentPath: string | null): string;
@@ -72,6 +73,14 @@ export function mountEditor(options: EditorOptions): EditorController {
       options.tableDialog.returnValue = "";
       options.tableDialog.showModal();
       return;
+    } else if (command === "insertEmoji") {
+      rememberSelection();
+      options.emojiDialog.returnValue = "";
+      options.emojiDialog.showModal();
+      return;
+    } else if (command === "insertTaskList") {
+      const selectedText = window.getSelection()?.toString().trim() || "Task item";
+      document.execCommand("insertHTML", false, `<ul><li class="task-item"><input type="checkbox" data-task-checkbox aria-label="Toggle task"> <span class="task-label">${escapeHtml(selectedText)}</span></li></ul><p><br></p>`);
     } else if (command === "blockquote") {
       document.execCommand("formatBlock", false, "blockquote");
     } else if (command === "formatBlock") {
@@ -108,6 +117,17 @@ export function mountEditor(options: EditorOptions): EditorController {
   };
   options.tableDialog.addEventListener("close", tableCloseHandler);
 
+  const emojiCloseHandler = (): void => {
+    const emoji = options.emojiDialog.returnValue;
+    if (!emoji || emoji === "cancel") return;
+    restoreSelection();
+    document.execCommand("insertText", false, emoji);
+    sync();
+    rememberSelection();
+    updateToolbarState();
+  };
+  options.emojiDialog.addEventListener("close", emojiCloseHandler);
+
   surface.addEventListener("input", sync);
   surface.addEventListener("keyup", updateToolbarState);
   surface.addEventListener("mouseup", updateToolbarState);
@@ -120,6 +140,7 @@ export function mountEditor(options: EditorOptions): EditorController {
     runCommand,
     destroy: () => {
       options.tableDialog.removeEventListener("close", tableCloseHandler);
+      options.emojiDialog.removeEventListener("close", emojiCloseHandler);
       options.formatSelect.removeEventListener("change", formatHandler);
       buttonHandlers.forEach(({ button, preventFocusLoss, execute }) => {
         button.removeEventListener("mousedown", preventFocusLoss);
@@ -173,7 +194,7 @@ function nodeToMarkdown(node: Node): string {
     case "li": return children().trim();
     case "table": return tableToMarkdown(node);
     case "div": return children().trim();
-    case "input": return node.getAttribute("type") === "checkbox" ? `[${node.hasAttribute("checked") ? "x" : " "}]` : "";
+    case "input": return node.getAttribute("type") === "checkbox" ? `[${node instanceof HTMLInputElement && node.checked ? "x" : " "}]` : "";
     default: return children();
   }
 }
@@ -185,7 +206,7 @@ function listToMarkdown(list: HTMLElement, ordered: boolean, depth = 0): string 
     const clone = item.cloneNode(true) as HTMLElement;
     clone.querySelectorAll("ul, ol").forEach((child) => child.remove());
     let text = Array.from(clone.childNodes).map(nodeToMarkdown).join("").trim();
-    const checkbox = item.querySelector<HTMLInputElement>("input[type=checkbox]");
+    const checkbox = Array.from(item.children).find((child): child is HTMLInputElement => child instanceof HTMLInputElement && child.type === "checkbox");
     if (checkbox) text = `[${checkbox.checked ? "x" : " "}] ${text.replace(/^\[[ xX]\]\s*/, "")}`;
     const marker = ordered ? `${index + 1}.` : "-";
     return `${indent}${marker} ${text}${nested ? `\n${listToMarkdown(nested, nested.tagName.toLowerCase() === "ol", depth + 1)}` : ""}`;
@@ -200,6 +221,10 @@ function tableToMarkdown(table: HTMLElement): string {
     `| ${rows[0].map(() => "---").join(" | ")} |`,
     ...rows.slice(1).map((row) => `| ${row.join(" | ")} |`),
   ].join("\n");
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
 }
 
 function isAllowedLinkUrl(href: string): boolean {
